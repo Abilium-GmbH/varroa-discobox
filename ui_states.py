@@ -1,0 +1,5 @@
+
+IDLE = 0
+VIEW = 1
+TEST_RUN = 2
+TEST_RUN_PAUSED = 3
