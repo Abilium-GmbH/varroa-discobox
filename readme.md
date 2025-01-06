@@ -47,19 +47,32 @@
 
 ## Execute the Discobox app
 
-- Run the `discobox.py` script:
+1. Install `tkinter`:
     ```terminal
-    python3 discobox.py
+    sudo apt update
+    sudo apt install python3-tk
     ```
-    The app will automatically connect to one of the connected cameras
-- List all connected cameras:
+1. Setup environment:
     ```terminal
-    python3 discobox.py -l
+    ./setup-python-env.sh
+    source venv/bin/activate
+    pip install '../VimbaX_Setup-2024-1-Linux64/VimbaX_2024-1/api/python/vmbpy-1.0.5-py3-none-any.whl[numpy,opencv]'
     ```
-    Lists all cameras your machine is connected with.
-- Run the `discobox.py` script with a specific camera:
-    ```terminal
-    python3 discobox.py <Camera ID>
-    ```
+    Make sure to enter the correct path to your VimbaX installation in the last command.
+1. Run the python script:
+    - Run the `discobox.py` script:
+        ```terminal
+        python3 discobox.py
+        ```
+        The app will automatically connect to one of the connected cameras
+    - List all connected cameras:
+        ```terminal
+        python3 discobox.py -l
+        ```
+        Lists all cameras your machine is connected with.
+    - Run the `discobox.py` script with a specific camera:
+        ```terminal
+        python3 discobox.py <Camera ID>
+        ```
 
 
