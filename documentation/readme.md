@@ -1,0 +1,7 @@
+## Documentation
+
+![states](states.png)
+
+[Finite State Machine Designer](https://www.madebyevan.com/fsm/)
+
+[comment]: # ("{"nodes":[{"x":311,"y":244,"text":"Idle","isAcceptState":false},{"x":441,"y":122,"text":"Run","isAcceptState":false},{"x":611,"y":141,"text":"Paused","isAcceptState":false},{"x":317,"y":399,"text":"View","isAcceptState":false}],"links":[{"type":"Link","nodeA":0,"nodeB":3,"text":"load","lineAngleAdjust":0,"parallelPart":0.5353978367165507,"perpendicularPart":34.698231713476126},{"type":"Link","nodeA":0,"nodeB":1,"text":"start","lineAngleAdjust":0,"parallelPart":0.5510246758678378,"perpendicularPart":23.201290363457925},{"type":"Link","nodeA":1,"nodeB":0,"text":"stop","lineAngleAdjust":0,"parallelPart":0.4968632371392723,"perpendicularPart":26.92058118508095},{"type":"Link","nodeA":1,"nodeB":2,"text":"pause","lineAngleAdjust":0,"parallelPart":0.5572519083969466,"perpendicularPart":30},{"type":"Link","nodeA":2,"nodeB":1,"text":"resume","lineAngleAdjust":0,"parallelPart":0.4961832061068702,"perpendicularPart":31},{"type":"Link","nodeA":2,"nodeB":0,"text":"stop","lineAngleAdjust":3.141592653589793,"parallelPart":0.4714588158117068,"perpendicularPart":-66.01737642169155},{"type":"Link","nodeA":3,"nodeB":0,"text":"close","lineAngleAdjust":0,"parallelPart":0.47858942065491195,"perpendicularPart":27.76294034181491}]}")
