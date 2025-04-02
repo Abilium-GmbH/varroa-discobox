@@ -7,69 +7,25 @@ import ui_states
 import sys
 import os
 
+import logging
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.DEBUG)
+
+_logger = logging.getLogger(__name__)
+
+from src.settings_view import SettingsView
 
 class UserInterface:
 
-    def __init__(self, cam):
+    def __init__(self, cam: Camera):
         self.cam = cam
 
         self.root = tk.Tk()
         self.root.title('Discobox')
-        self.root.geometry("720x480+300+150")
+        self.root.geometry('1440x960+100+100')
         self.root.resizable(width=True, height=True)
         # self.root.bind('<Configure>', self.on_window_resize)
 
-        self.frame = tk.Frame(self.root)
-        self.frame.grid()
-
-        self.panel = tk.Label(self.frame)
-        self.panel.grid(column=1, row=0)
-
-        self.controls_panel = tk.Frame(self.frame, padx=10, pady=10)
-        self.controls_panel.grid(column=0, row=0, sticky='NW')
-
-        self.show_hide_cam_button = tk.Button(self.controls_panel, text='Show Camera', command=self.show_hide_cam, width=15)
-        self.show_hide_cam_button.grid(column=0, row=0, pady=(0, 10))
-
-        self.start_stop_button = tk.Button(self.controls_panel, text='Start', command=self.start_stop_test_run, width=15, state=tk.DISABLED)
-        self.start_stop_button.grid(column=0, row=1)
-            
-        self.pause_resume_button = tk.Button(self.controls_panel, text='Pause', command=self.pause_resume_test_run, width=15, state=tk.DISABLED)
-        self.pause_resume_button.grid(column=0, row=2)
-
-        self.test_run_label = tk.Label(self.controls_panel, text='', width=15, anchor='nw', justify='left', wraplength=100)
-        self.test_run_label.grid(column=0, row=3)
-
-        self.test_runs = tk.Variable(value=[])
-        self.test_runs_list = tk.Listbox(self.controls_panel, listvariable=self.test_runs, selectmode='single')
-        self.test_runs_list.grid(column=0, row=4, pady=(10, 0))
-        self.test_runs_list.bind('<<ListboxSelect>>', self.on_select_test_run)
-        self.update_test_runs_list()
-
-        self.load_exit_test_run_button = tk.Button(self.controls_panel, text='Load Test Run', command=self.load_close_test_run, width=15, state=tk.DISABLED)
-        self.load_exit_test_run_button.grid(column=0, row=5)
-
-        self.view_controls = tk.Frame(self.frame, padx=10, pady=10)
-        self.view_controls.grid(column=1, row=1, sticky='NE')
-
-        self.view_image_label = tk.Label(self.view_controls, text='')
-        self.view_image_label.grid(column=0, row=0, padx=(0, 10))
-        self.first_image_button = tk.Button(self.view_controls, text='<<<', command=self.show_first_image, border=0)
-        self.first_image_button.grid(column=1, row=0)
-        self.prev_image_button = tk.Button(self.view_controls, text='<', command=self.show_prev_image, border=0)
-        self.prev_image_button.grid(column=2, row=0)
-        self.view_page = tk.StringVar()
-        self.view_page_input = tk.Entry(self.view_controls, textvariable=self.view_page, width=2)
-        self.view_page_input.grid(column=3, row=0, padx=(8, 0))
-        self.view_page_input.bind('<Return>', self.go_to_image)
-        self.view_image_pager = tk.Label(self.view_controls, text='')
-        self.view_image_pager.grid(column=4, row=0, padx=(0, 8))
-        self.next_image_button = tk.Button(self.view_controls, text='>', command=self.show_next_image, border=0)
-        self.next_image_button.grid(column=5, row=0)
-        self.last_image_button = tk.Button(self.view_controls, text='>>>', command=self.show_last_image, border=0)
-        self.last_image_button.grid(column=6, row=0)
-
-        # self.root.bind('<Escape>', lambda e: self.root.quit())
+        self._build_root_ui()
 
         self.is_test_run = None
         self.test_run_paused = False
@@ -182,6 +138,9 @@ class UserInterface:
             self.loaded_test_run = None
             self.clear_panel()
             self.change_state(ui_states.IDLE)
+    
+    def show_settings_window(self):
+        self.settings = SettingsView(self.cam, self.root)
 
     def show_first_image(self):
         self.show_image(0)
@@ -246,11 +205,11 @@ class UserInterface:
         self.panel.image = None
 
     # def on_window_resize(self, event):
-    #     print(f'on_window_resize {event}')
+    #     _logger.info(f'on_window_resize {event}')
     #     self.show_image(self.loaded_test_run_image)
 
     def __call__(self, cam: Camera, stream: Stream, frame: Frame):
-        # print('{} acquired {}'.format(cam, frame), flush=True)
+        # _logger.info('{} acquired {}'.format(cam, frame), flush=True)
 
         if frame.get_status() == FrameStatus.Complete:
             frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height())
@@ -274,7 +233,62 @@ class UserInterface:
             self.panel.image = img
 
         cam.queue_frame(frame)
+    
+    def _build_root_ui(self):
+        self.frame = tk.Frame(self.root)
+        self.frame.grid()
 
+        self.panel = tk.Label(self.frame)
+        self.panel.grid(column=1, row=0)
+
+        self.controls_panel = tk.Frame(self.frame, padx=10, pady=10)
+        self.controls_panel.grid(column=0, row=0, sticky='NW')
+
+        self.show_hide_cam_button = tk.Button(self.controls_panel, text='Show Camera', command=self.show_hide_cam, width=15)
+        self.show_hide_cam_button.grid(column=0, row=0, pady=(0, 10))
+
+        self.start_stop_button = tk.Button(self.controls_panel, text='Start', command=self.start_stop_test_run, width=15, state=tk.DISABLED)
+        self.start_stop_button.grid(column=0, row=1)
+            
+        self.pause_resume_button = tk.Button(self.controls_panel, text='Pause', command=self.pause_resume_test_run, width=15, state=tk.DISABLED)
+        self.pause_resume_button.grid(column=0, row=2)
+
+        self.test_run_label = tk.Label(self.controls_panel, text='', width=15, anchor='nw', justify='left', wraplength=100)
+        self.test_run_label.grid(column=0, row=3)
+
+        self.test_runs = tk.Variable(value=[])
+        self.test_runs_list = tk.Listbox(self.controls_panel, listvariable=self.test_runs, selectmode='single')
+        self.test_runs_list.grid(column=0, row=4, pady=(10, 0))
+        self.test_runs_list.bind('<<ListboxSelect>>', self.on_select_test_run)
+        self.update_test_runs_list()
+
+        self.load_exit_test_run_button = tk.Button(self.controls_panel, text='Load Test Run', command=self.load_close_test_run, width=15, state=tk.DISABLED)
+        self.load_exit_test_run_button.grid(column=0, row=5)
+
+        self.settings_button = tk.Button(self.controls_panel, text='Settings', command=self.show_settings_window, width=15)
+        self.settings_button.grid(column=0, row=6, pady=(10, 0))
+
+        self.view_controls = tk.Frame(self.frame, padx=10, pady=10)
+        self.view_controls.grid(column=1, row=1, sticky='NE')
+
+        self.view_image_label = tk.Label(self.view_controls, text='')
+        self.view_image_label.grid(column=0, row=0, padx=(0, 10))
+        self.first_image_button = tk.Button(self.view_controls, text='<<<', command=self.show_first_image, border=0)
+        self.first_image_button.grid(column=1, row=0)
+        self.prev_image_button = tk.Button(self.view_controls, text='<', command=self.show_prev_image, border=0)
+        self.prev_image_button.grid(column=2, row=0)
+        self.view_page = tk.StringVar()
+        self.view_page_input = tk.Entry(self.view_controls, textvariable=self.view_page, width=2)
+        self.view_page_input.grid(column=3, row=0, padx=(8, 0))
+        self.view_page_input.bind('<Return>', self.go_to_image)
+        self.view_image_pager = tk.Label(self.view_controls, text='')
+        self.view_image_pager.grid(column=4, row=0, padx=(0, 8))
+        self.next_image_button = tk.Button(self.view_controls, text='>', command=self.show_next_image, border=0)
+        self.next_image_button.grid(column=5, row=0)
+        self.last_image_button = tk.Button(self.view_controls, text='>>>', command=self.show_last_image, border=0)
+        self.last_image_button.grid(column=6, row=0)
+
+        # self.root.bind('<Escape>', lambda e: self.root.quit())
 
 
 def abort(reason: str, return_code: int = 1):
