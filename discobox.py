@@ -278,11 +278,18 @@ class UserInterface:
 
 
 def abort(reason: str, return_code: int = 1):
-    print(reason + '\n')
+    """ Prints `reason` to the console and exits the program with `return_code`.
+    """
+    _logger.info(reason + '\n')
     sys.exit(return_code)
 
 
 def get_camera(camera_id: Optional[str]) -> Camera:
+    """ Loads the camera specified by `camera_id` from the Vimba API.
+    If `camera_id` is not provided, loads the first available camera.
+
+    :param camera_id: (optional) ID of the camera to load
+    """
     with VmbSystem.get_instance() as vmb:
         if camera_id:
             try:
@@ -309,6 +316,8 @@ def setup_camera(cam: Camera):
 
 
 def print_camera(cam: Camera):
+    """ Prints all relevant information about a camera to the console.
+    """
     print('/// Camera Name   : {}'.format(cam.get_name()))
     print('/// Model Name    : {}'.format(cam.get_model()))
     print('/// Camera ID     : {}'.format(cam.get_id()))
@@ -317,6 +326,8 @@ def print_camera(cam: Camera):
 
 
 def list_cameras():
+    """ Lists all available cameras
+    """
     with VmbSystem.get_instance() as vmb:
         cams = vmb.get_all_cameras()
         print('Cameras found: {}'.format(len(cams)))
@@ -324,10 +335,33 @@ def list_cameras():
             print_camera(cam)
 
 
+def print_help():
+    """ Prints help information about this script to the console.
+    """
+    print(
+        'Opens a camera viewer for the Discobox.\n'
+        '\n'
+        'Usage:\n'
+        '  $ python3 discobox.py [opt] [arg]\n'
+        '\n'
+        'Options:\n'
+        '  -h, --help: print help information and exit\n'
+        '  -l, --list: list all available cameras and exit\n'
+        '\n'
+        'Arguments:\n'
+        '  camera_id: (optional) ID of the camera to open in the viewer\n'
+        '             defaults to the first available camera\n'
+    )
+
+
 def main():
     args = sys.argv[1:]
 
-    if len(args) > 0 and args[0] == '-l':
+    if len(args) > 0 and args[0] in ('-h', '--help'):
+        print_help()
+        return
+
+    if len(args) > 0 and args[0] in ('-l', '--list'):
         list_cameras()
         return
 
@@ -335,7 +369,7 @@ def main():
 
     with VmbSystem.get_instance():
         with get_camera(cam_id) as cam:
-            print(cam.get_id())
+            _logger.info(f'Selected camera with ID {cam.get_id()}')
             setup_camera(cam)
             ui = UserInterface(cam)
             ui.start()
