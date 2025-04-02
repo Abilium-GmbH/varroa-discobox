@@ -65,6 +65,11 @@
         python3 discobox.py
         ```
         The app will automatically connect to one of the connected cameras
+    - Print help information:
+        ```terminal
+        python3 discobox.py -h
+        ```
+        Prints help information about this script to the console.
     - List all connected cameras:
         ```terminal
         python3 discobox.py -l
