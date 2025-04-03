@@ -23,7 +23,7 @@ class UserInterface:
         self.root.title('Discobox')
         self.root.geometry('1440x960+100+100')
         self.root.resizable(width=True, height=True)
-        # self.root.bind('<Configure>', self.on_window_resize)
+        self.root.bind('<Configure>', self.on_window_resize)
 
         self._build_root_ui()
 
@@ -115,6 +115,8 @@ class UserInterface:
         self.test_runs.set(sorted([dir.name for dir in os.scandir('output')], reverse=True))
     
     def on_select_test_run(self, val):
+        if self.test_runs_list['state'] == 'disabled':
+            return
         selected = [self.test_runs_list.get(i) for i in self.test_runs_list.curselection()]
         if len(selected) != 1 or self.state != ui_states.IDLE:
             self.load_exit_test_run_button.configure(state=tk.DISABLED)
@@ -204,12 +206,11 @@ class UserInterface:
         self.panel.configure(image=None)
         self.panel.image = None
 
-    # def on_window_resize(self, event):
-    #     _logger.info(f'on_window_resize {event}')
-    #     self.show_image(self.loaded_test_run_image)
+    def on_window_resize(self, event):
+        self.show_image(self.loaded_test_run_image)
 
     def __call__(self, cam: Camera, stream: Stream, frame: Frame):
-        # _logger.info('{} acquired {}'.format(cam, frame), flush=True)
+        # _logger.info('{} acquired {}'.format(cam, frame))
 
         if frame.get_status() == FrameStatus.Complete:
             frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height())
@@ -221,7 +222,7 @@ class UserInterface:
             else:
                 image_size = (frame_size[0], int(frame_size[0] / ratio))
 
-            img = Image.fromarray(frame.convert_pixel_format(PixelFormat.Rgb8).as_numpy_ndarray())
+            img = Image.fromarray(frame.as_numpy_ndarray()[:, :, 0], mode='L')
             
             if self.is_test_run is not None and not self.test_run_paused:
                 img.save(f'output/{self.is_test_run}/{self.is_test_run}-{frame.get_id():06}.png')
@@ -241,32 +242,35 @@ class UserInterface:
         self.panel = tk.Label(self.frame)
         self.panel.grid(column=1, row=0)
 
-        self.controls_panel = tk.Frame(self.frame, padx=10, pady=10)
+        self.controls_panel = tk.Frame(self.frame, width=5, padx=10, pady=10)
         self.controls_panel.grid(column=0, row=0, sticky='NW')
 
+        self.camera_label = tk.Label(self.controls_panel, text=f'Camera ID: {self.cam.get_id()}', width=15, anchor='nw', justify='left', wraplength=100)
+        self.camera_label.grid(column=0, row=0, padx=(0, 0), pady=(0, 0))
+
         self.show_hide_cam_button = tk.Button(self.controls_panel, text='Show Camera', command=self.show_hide_cam, width=15)
-        self.show_hide_cam_button.grid(column=0, row=0, pady=(0, 10))
+        self.show_hide_cam_button.grid(column=0, row=1, pady=(0, 10))
 
         self.start_stop_button = tk.Button(self.controls_panel, text='Start', command=self.start_stop_test_run, width=15, state=tk.DISABLED)
-        self.start_stop_button.grid(column=0, row=1)
+        self.start_stop_button.grid(column=0, row=2)
             
         self.pause_resume_button = tk.Button(self.controls_panel, text='Pause', command=self.pause_resume_test_run, width=15, state=tk.DISABLED)
-        self.pause_resume_button.grid(column=0, row=2)
+        self.pause_resume_button.grid(column=0, row=3)
 
         self.test_run_label = tk.Label(self.controls_panel, text='', width=15, anchor='nw', justify='left', wraplength=100)
-        self.test_run_label.grid(column=0, row=3)
+        self.test_run_label.grid(column=0, row=4)
 
         self.test_runs = tk.Variable(value=[])
         self.test_runs_list = tk.Listbox(self.controls_panel, listvariable=self.test_runs, selectmode='single')
-        self.test_runs_list.grid(column=0, row=4, pady=(10, 0))
+        self.test_runs_list.grid(column=0, row=5, pady=(10, 0))
         self.test_runs_list.bind('<<ListboxSelect>>', self.on_select_test_run)
         self.update_test_runs_list()
 
         self.load_exit_test_run_button = tk.Button(self.controls_panel, text='Load Test Run', command=self.load_close_test_run, width=15, state=tk.DISABLED)
-        self.load_exit_test_run_button.grid(column=0, row=5)
+        self.load_exit_test_run_button.grid(column=0, row=6)
 
         self.settings_button = tk.Button(self.controls_panel, text='Settings', command=self.show_settings_window, width=15)
-        self.settings_button.grid(column=0, row=6, pady=(10, 0))
+        self.settings_button.grid(column=0, row=7, pady=(10, 0))
 
         self.view_controls = tk.Frame(self.frame, padx=10, pady=10)
         self.view_controls.grid(column=1, row=1, sticky='NE')
@@ -318,6 +322,8 @@ def get_camera(camera_id: Optional[str]) -> Camera:
 
 
 def setup_camera(cam: Camera):
+    cam.set_pixel_format(PixelFormat.Mono8)
+
     with cam:
         # Try to adjust GeV packet size. This Feature is only available for GigE - Cameras.
         try:
