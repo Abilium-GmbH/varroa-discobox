@@ -4,10 +4,10 @@ from typing import Optional
 from vmbpy import *
 import tkinter as tk
 import ui_states
+import logging
 import sys
 import os
 
-import logging
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.DEBUG)
 
 _logger = logging.getLogger(__name__)
@@ -168,9 +168,9 @@ class UserInterface:
         if self.loaded_test_run is None:
             return
         
-        images = sorted([dir.name for dir in os.scandir(f'output/{self.loaded_test_run}')])
+        images = sorted([dir.name for dir in os.scandir(f'output/{self.loaded_test_run}') if dir.name.endswith(('.bmp', '.jpg', '.png', '.jpeg'))])
 
-        if index < -1 or index >= len(images):
+        if index < -1 or index >= len(images) or len(images) == 0:
             return
         if index == -1:
             index = len(images) - 1
@@ -225,7 +225,7 @@ class UserInterface:
             img = Image.fromarray(frame.as_numpy_ndarray()[:, :, 0], mode='L')
             
             if self.is_test_run is not None and not self.test_run_paused:
-                img.save(f'output/{self.is_test_run}/{self.is_test_run}-{frame.get_id():06}.png')
+                img.save(f'output/{self.is_test_run}/{self.is_test_run}-{frame.get_id():06}.bmp')
 
             img = img.resize(image_size)
             img = ImageTk.PhotoImage(img)
@@ -245,7 +245,7 @@ class UserInterface:
         self.controls_panel = tk.Frame(self.frame, width=5, padx=10, pady=10)
         self.controls_panel.grid(column=0, row=0, sticky='NW')
 
-        self.camera_label = tk.Label(self.controls_panel, text=f'Camera ID: {self.cam.get_id()}', width=15, anchor='nw', justify='left', wraplength=100)
+        self.camera_label = tk.Label(self.controls_panel, text=f'Camera ID: {self.cam.get_id()}', anchor='nw', justify='left', wraplength=100)
         self.camera_label.grid(column=0, row=0, padx=(0, 0), pady=(0, 0))
 
         self.show_hide_cam_button = tk.Button(self.controls_panel, text='Show Camera', command=self.show_hide_cam, width=15)
