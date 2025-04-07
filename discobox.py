@@ -244,7 +244,9 @@ class UserInterface:
         self.panel.image = None
 
     def on_window_resize(self, event):
-        if event.widget == self.root or event.widget == self.view_controls_parent:
+        if (event.widget == self.root and (event.width != self.window_width or event.height != self.window_height)) or event.widget == self.view_controls_parent:
+            self.window_width = event.width
+            self.window_height = event.height
             self.show_image(self.loaded_test_run_image)
 
     def __call__(self, cam: Camera, stream: Stream, frame: Frame):
