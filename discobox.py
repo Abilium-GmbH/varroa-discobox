@@ -3,7 +3,6 @@ from datetime import datetime
 from vmbpy import *
 import tkinter as tk
 from tkinter import ttk
-import threading
 import ui_states
 import logging
 import sys
@@ -16,7 +15,7 @@ _logger = logging.getLogger(__name__)
 from src.settings_view import SettingsView
 from src.select_camera_view import SelectCameraView
 from src.camera_utils import setup_camera, list_cameras, get_camera
-from src.processing_2 import process_images
+from src.processing import process_images
 from src.thread_with_callback import ThreadWithCallback
 
 class UserInterface:
@@ -376,7 +375,6 @@ def print_help():
         '\n'
         'Arguments:\n'
         '  camera_id: (optional) ID of the camera to open in the viewer\n'
-        '             defaults to the first available camera\n'
     )
 
 
