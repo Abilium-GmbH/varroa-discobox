@@ -1,8 +1,9 @@
 from PIL import Image, ImageTk
 from datetime import datetime
-from typing import Optional
 from vmbpy import *
 import tkinter as tk
+from tkinter import ttk
+import threading
 import ui_states
 import logging
 import sys
@@ -13,11 +14,27 @@ logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', d
 _logger = logging.getLogger(__name__)
 
 from src.settings_view import SettingsView
+from src.select_camera_view import SelectCameraView
+from src.camera_utils import setup_camera, list_cameras, get_camera
+from src.processing_2 import process_images
+from src.thread_with_callback import ThreadWithCallback
 
 class UserInterface:
 
-    def __init__(self, cam: Camera):
+    def __init__(self, cam: Camera = None):
         self.cam = cam
+
+        self.window_width = 0
+        self.window_height = 0
+
+        self.is_test_run = None
+        self.test_run_paused = False
+
+        self.loaded_test_run = None
+        self.loaded_test_run_image = 0
+        self.show_result_images = False
+
+        self.state = ui_states.IDLE
 
         self.root = tk.Tk()
         self.root.title('Discobox')
@@ -27,12 +44,6 @@ class UserInterface:
 
         self._build_root_ui()
 
-        self.is_test_run = None
-        self.test_run_paused = False
-
-        self.loaded_test_run = None
-        self.loaded_test_run_image = 0
-
         self.change_state(ui_states.IDLE)
 
     def start(self):
@@ -41,17 +52,17 @@ class UserInterface:
     def change_state(self, state):
         self.state = state
         if self.state == ui_states.IDLE:
-            if self.cam.is_streaming():
+            if self.cam and self.cam.is_streaming():
                 self.show_hide_cam_button.configure(text='Close Camera', state=tk.NORMAL)
                 self.start_stop_button.configure(text='Start Test Run', state=tk.NORMAL)
             else:
-                self.show_hide_cam_button.configure(text='Show Camera', state=tk.NORMAL)
+                self.show_hide_cam_button.configure(text='Show Camera', state=tk.NORMAL if self.cam else tk.DISABLED)
                 self.start_stop_button.configure(text='Start Test Run', state=tk.DISABLED)
 
             self.pause_resume_button.configure(text='Pause Test Run', state=tk.DISABLED)
             self.test_runs_list.configure(state=tk.NORMAL)
             self.load_exit_test_run_button.configure(text='Load Test Run', state=tk.NORMAL if self.test_runs_list.curselection() else tk.DISABLED)
-            self.view_controls.grid_forget()
+            self.view_controls_parent.grid_forget()
 
         elif self.state == ui_states.TEST_RUN:
             self.show_hide_cam_button.configure(state=tk.DISABLED)
@@ -59,7 +70,7 @@ class UserInterface:
             self.pause_resume_button.configure(text='Pause Test Run', state=tk.NORMAL)
             self.test_runs_list.configure(state=tk.DISABLED)
             self.load_exit_test_run_button.configure(text='Load Test Run', state=tk.DISABLED)
-            self.view_controls.grid_forget()
+            self.view_controls_parent.grid_forget()
 
         elif self.state == ui_states.TEST_RUN_PAUSED:
             self.show_hide_cam_button.configure(state=tk.DISABLED)
@@ -67,7 +78,7 @@ class UserInterface:
             self.pause_resume_button.configure(text='Resume Test Run', state=tk.NORMAL)
             self.test_runs_list.configure(state=tk.DISABLED)
             self.load_exit_test_run_button.configure(text='Load Test Run', state=tk.DISABLED)
-            self.view_controls.grid_forget()
+            self.view_controls_parent.grid_forget()
 
         elif self.state == ui_states.VIEW:
             self.show_hide_cam_button.configure(state=tk.DISABLED)
@@ -75,7 +86,10 @@ class UserInterface:
             self.pause_resume_button.configure(text='Pause Test Run', state=tk.DISABLED)
             self.test_runs_list.configure(state=tk.DISABLED)
             self.load_exit_test_run_button.configure(text='Close Test Run', state=tk.NORMAL)
-            self.view_controls.grid(column=1, row=1, sticky='NE')
+            self.view_controls_parent.grid(column=1, row=1, sticky='ew')
+        
+        self.settings_button.configure(state=tk.NORMAL if self.cam else tk.DISABLED)
+        self.camera_label.configure(text=f'Camera ID: {self.cam.get_id()}' if self.cam else 'No camera selected')
 
     def show_hide_cam(self):
         if self.cam.is_streaming():
@@ -125,7 +139,7 @@ class UserInterface:
     
     def load_close_test_run(self):
         if self.loaded_test_run is None:
-            if self.cam.is_streaming():
+            if self.cam and self.cam.is_streaming():
                 self.cam.stop_streaming()
                 self.clear_panel()
 
@@ -143,6 +157,25 @@ class UserInterface:
     
     def show_settings_window(self):
         self.settings = SettingsView(self.cam, self.root)
+
+    def analyze_testrun(self):
+        thread = ThreadWithCallback(target=process_images, args=(f'output/{self.loaded_test_run}',), callback=self.testrun_analyze_finished)
+        self.view_controls_parent.grid_forget()
+        self.analyze_progressbar_parent.grid(column=1, row=1, sticky='ew')
+        self.analyze_progressbar.start()
+        self.load_exit_test_run_button.configure(state=tk.DISABLED)
+        thread.start()
+
+    def testrun_analyze_finished(self):
+        self.view_controls_parent.grid(column=1, row=1, sticky='ew')
+        self.analyze_progressbar_parent.grid_forget()
+        self.analyze_progressbar.stop()
+        self.load_exit_test_run_button.configure(state=tk.NORMAL)
+
+    def show_hide_results(self):
+        self.show_result_images = not self.show_result_images
+        self.show_hide_results_button.configure(text='Show testrun images' if self.show_result_images else 'Show results')
+        self.show_first_image()
 
     def show_first_image(self):
         self.show_image(0)
@@ -168,7 +201,12 @@ class UserInterface:
         if self.loaded_test_run is None:
             return
         
-        images = sorted([dir.name for dir in os.scandir(f'output/{self.loaded_test_run}') if dir.name.endswith(('.bmp', '.jpg', '.png', '.jpeg'))])
+        path = f'output/{self.loaded_test_run}/results' if self.show_result_images else f'output/{self.loaded_test_run}'
+        if self.show_result_images and not os.path.exists(path):
+            self.show_hide_results()
+            return
+
+        images = sorted([dir.name for dir in os.scandir(path) if dir.name.endswith(('.bmp', '.jpg', '.png', '.jpeg'))])
 
         if index < -1 or index >= len(images) or len(images) == 0:
             return
@@ -176,7 +214,7 @@ class UserInterface:
             index = len(images) - 1
         
         self.loaded_test_run_image = index
-        img = Image.open(f'output/{self.loaded_test_run}/{images[index]}')
+        img = Image.open(f'{path}/{images[index]}')
 
         self.view_image_label.configure(text=images[index])
         self.view_page.set(index+1)
@@ -187,7 +225,7 @@ class UserInterface:
         self.next_image_button.configure(state=tk.DISABLED if self.loaded_test_run_image == len(images) - 1 else tk.NORMAL)
         self.last_image_button.configure(state=tk.DISABLED if self.loaded_test_run_image == len(images) - 1 else tk.NORMAL)
 
-        frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.view_controls.winfo_height())
+        frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.view_controls_parent.winfo_height())
         image_size = (0, 0)
         ratio = img.width / img.height
 
@@ -207,7 +245,8 @@ class UserInterface:
         self.panel.image = None
 
     def on_window_resize(self, event):
-        self.show_image(self.loaded_test_run_image)
+        if event.widget == self.root or event.widget == self.view_controls_parent:
+            self.show_image(self.loaded_test_run_image)
 
     def __call__(self, cam: Camera, stream: Stream, frame: Frame):
         # _logger.info('{} acquired {}'.format(cam, frame))
@@ -245,114 +284,81 @@ class UserInterface:
         self.controls_panel = tk.Frame(self.frame, width=5, padx=10, pady=10)
         self.controls_panel.grid(column=0, row=0, sticky='NW')
 
-        self.camera_label = tk.Label(self.controls_panel, text=f'Camera ID: {self.cam.get_id()}', anchor='nw', justify='left', wraplength=100)
-        self.camera_label.grid(column=0, row=0, padx=(0, 0), pady=(0, 0))
+        self.camera_label = tk.Label(self.controls_panel, text='No camera selected', anchor='nw', justify='left', wraplength=100)
+        self.camera_label.grid(column=0, row=0, padx=(0, 0), pady=(0, 0), sticky='ew')
 
-        self.show_hide_cam_button = tk.Button(self.controls_panel, text='Show Camera', command=self.show_hide_cam, width=15)
-        self.show_hide_cam_button.grid(column=0, row=1, pady=(0, 10))
+        self.show_hide_cam_button = tk.Button(self.controls_panel, text='Show Camera', command=self.show_hide_cam)
+        self.show_hide_cam_button.grid(column=0, row=1, sticky='ew')
 
-        self.start_stop_button = tk.Button(self.controls_panel, text='Start', command=self.start_stop_test_run, width=15, state=tk.DISABLED)
-        self.start_stop_button.grid(column=0, row=2)
+        self.settings_button = tk.Button(self.controls_panel, text='Camera Settings', command=self.show_settings_window)
+        self.settings_button.grid(column=0, row=2, pady=(0, 10), sticky='ew')
+
+        self.start_stop_button = tk.Button(self.controls_panel, text='Start', command=self.start_stop_test_run, state=tk.DISABLED)
+        self.start_stop_button.grid(column=0, row=3, sticky='ew')
             
-        self.pause_resume_button = tk.Button(self.controls_panel, text='Pause', command=self.pause_resume_test_run, width=15, state=tk.DISABLED)
-        self.pause_resume_button.grid(column=0, row=3)
+        self.pause_resume_button = tk.Button(self.controls_panel, text='Pause', command=self.pause_resume_test_run, state=tk.DISABLED)
+        self.pause_resume_button.grid(column=0, row=4, sticky='ew')
 
-        self.test_run_label = tk.Label(self.controls_panel, text='', width=15, anchor='nw', justify='left', wraplength=100)
-        self.test_run_label.grid(column=0, row=4)
+        self.test_run_label = tk.Label(self.controls_panel, text='', anchor='nw', justify='left', wraplength=100)
+        self.test_run_label.grid(column=0, row=5, sticky='ew')
 
         self.test_runs = tk.Variable(value=[])
         self.test_runs_list = tk.Listbox(self.controls_panel, listvariable=self.test_runs, selectmode='single')
-        self.test_runs_list.grid(column=0, row=5, pady=(10, 0))
+        self.test_runs_list.grid(column=0, row=6, pady=(10, 0), sticky='ew')
         self.test_runs_list.bind('<<ListboxSelect>>', self.on_select_test_run)
         self.update_test_runs_list()
 
-        self.load_exit_test_run_button = tk.Button(self.controls_panel, text='Load Test Run', command=self.load_close_test_run, width=15, state=tk.DISABLED)
-        self.load_exit_test_run_button.grid(column=0, row=6)
+        self.load_exit_test_run_button = tk.Button(self.controls_panel, text='Load Test Run', command=self.load_close_test_run, state=tk.DISABLED)
+        self.load_exit_test_run_button.grid(column=0, row=7, sticky='ew')
 
-        self.settings_button = tk.Button(self.controls_panel, text='Settings', command=self.show_settings_window, width=15)
-        self.settings_button.grid(column=0, row=7, pady=(10, 0))
+        self.view_controls_parent = tk.Frame(self.frame, padx=10, pady=10)
+        self.view_controls_parent.grid(column=1, row=1, sticky='ew')
+        self.view_controls_parent.grid_rowconfigure(0, weight=1)
+        self.view_controls_parent.grid_columnconfigure(0, weight=1)
 
-        self.view_controls = tk.Frame(self.frame, padx=10, pady=10)
-        self.view_controls.grid(column=1, row=1, sticky='NE')
+        self.analyze_progressbar_parent = tk.Frame(self.frame, padx=10, pady=10)
+        self.analyze_progressbar_parent.grid_rowconfigure(0, weight=1)
+        self.analyze_progressbar_parent.grid_columnconfigure(1, weight=1)
+
+        self.analyze_progressbar_label = tk.Label(self.analyze_progressbar_parent, text='analyzing ...')
+        self.analyze_progressbar_label.grid(column=0, row=0, padx=(0, 40))
+        
+        self.analyze_progressbar = ttk.Progressbar(self.analyze_progressbar_parent, orient='horizontal', mode='indeterminate', length=100)
+        self.analyze_progressbar.grid(column=1, row=0, sticky='ew')
+        self.analyze_progressbar.step(40)
+
+        self.view_controls = tk.Frame(self.view_controls_parent)
+        self.view_controls.grid(column=0, row=0, sticky='ew')
+        self.view_controls.grid_rowconfigure(0, weight=1)
+        self.view_controls.grid_columnconfigure(2, weight=1)
+
+        self.show_hide_results_button = tk.Button(self.view_controls, text='Show results', command=self.show_hide_results)
+        self.show_hide_results_button.grid(column=0, row=0, padx=(0, 5))
+
+        self.analyze_button = tk.Button(self.view_controls, text='Analyze Testrun', command=self.analyze_testrun)
+        self.analyze_button.grid(column=1, row=0, padx=(0, 20))
+
+        self.spacer = tk.Frame(self.view_controls)
+        self.spacer.grid(column=2, row=0)
 
         self.view_image_label = tk.Label(self.view_controls, text='')
-        self.view_image_label.grid(column=0, row=0, padx=(0, 10))
+        self.view_image_label.grid(column=3, row=0, padx=(0, 10))
         self.first_image_button = tk.Button(self.view_controls, text='<<<', command=self.show_first_image, border=0)
-        self.first_image_button.grid(column=1, row=0)
+        self.first_image_button.grid(column=4, row=0)
         self.prev_image_button = tk.Button(self.view_controls, text='<', command=self.show_prev_image, border=0)
-        self.prev_image_button.grid(column=2, row=0)
+        self.prev_image_button.grid(column=5, row=0)
         self.view_page = tk.StringVar()
         self.view_page_input = tk.Entry(self.view_controls, textvariable=self.view_page, width=2)
-        self.view_page_input.grid(column=3, row=0, padx=(8, 0))
+        self.view_page_input.grid(column=6, row=0, padx=(8, 0))
         self.view_page_input.bind('<Return>', self.go_to_image)
         self.view_image_pager = tk.Label(self.view_controls, text='')
-        self.view_image_pager.grid(column=4, row=0, padx=(0, 8))
+        self.view_image_pager.grid(column=7, row=0, padx=(0, 8))
         self.next_image_button = tk.Button(self.view_controls, text='>', command=self.show_next_image, border=0)
-        self.next_image_button.grid(column=5, row=0)
+        self.next_image_button.grid(column=8, row=0)
         self.last_image_button = tk.Button(self.view_controls, text='>>>', command=self.show_last_image, border=0)
-        self.last_image_button.grid(column=6, row=0)
+        self.last_image_button.grid(column=9, row=0)
 
         # self.root.bind('<Escape>', lambda e: self.root.quit())
-
-
-def abort(reason: str, return_code: int = 1):
-    """ Prints `reason` to the console and exits the program with `return_code`.
-    """
-    _logger.info(reason + '\n')
-    sys.exit(return_code)
-
-
-def get_camera(camera_id: Optional[str]) -> Camera:
-    """ Loads the camera specified by `camera_id` from the Vimba API.
-    If `camera_id` is not provided, loads the first available camera.
-
-    :param camera_id: (optional) ID of the camera to load
-    """
-    with VmbSystem.get_instance() as vmb:
-        if camera_id:
-            try:
-                return vmb.get_camera_by_id(camera_id)
-            except VmbCameraError:
-                abort('Failed to access Camera \'{}\'. Abort.'.format(camera_id))
-        else:
-            cams = vmb.get_all_cameras()
-            if not cams:
-                abort('No Cameras accessible. Abort.')
-            return cams[0]
-
-
-def setup_camera(cam: Camera):
-    cam.set_pixel_format(PixelFormat.Mono8)
-
-    with cam:
-        # Try to adjust GeV packet size. This Feature is only available for GigE - Cameras.
-        try:
-            stream = cam.get_streams()[0]
-            stream.GVSPAdjustPacketSize.run()
-            while not stream.GVSPAdjustPacketSize.is_done():
-                pass
-        except (AttributeError, VmbFeatureError):
-            pass
-
-
-def print_camera(cam: Camera):
-    """ Prints all relevant information about a camera to the console.
-    """
-    print('/// Camera Name   : {}'.format(cam.get_name()))
-    print('/// Model Name    : {}'.format(cam.get_model()))
-    print('/// Camera ID     : {}'.format(cam.get_id()))
-    print('/// Serial Number : {}'.format(cam.get_serial()))
-    print('/// Interface ID  : {}\n'.format(cam.get_interface_id()))
-
-
-def list_cameras():
-    """ Lists all available cameras
-    """
-    with VmbSystem.get_instance() as vmb:
-        cams = vmb.get_all_cameras()
-        print('Cameras found: {}'.format(len(cams)))
-        for cam in cams:
-            print_camera(cam)
 
 
 def print_help():
@@ -374,6 +380,17 @@ def print_help():
     )
 
 
+def start_with_cam(cam_id):
+    with get_camera(cam_id) as cam:
+        _logger.info(f'Selected camera with ID {cam.get_id()}')
+        setup_camera(cam)
+        ui = UserInterface(cam)
+        ui.start()
+
+def start_without_cam():
+    ui = UserInterface()
+    ui.start()
+
 def main():
     args = sys.argv[1:]
 
@@ -388,11 +405,11 @@ def main():
     cam_id = args[0] if len(args) > 0 else None
 
     with VmbSystem.get_instance():
-        with get_camera(cam_id) as cam:
-            _logger.info(f'Selected camera with ID {cam.get_id()}')
-            setup_camera(cam)
-            ui = UserInterface(cam)
-            ui.start()
+        if cam_id:
+            start_with_cam(cam_id)
+        else:
+            select_camera = SelectCameraView(start_with_cam, start_without_cam)
+            select_camera.start()
 
 
 if __name__ == '__main__':

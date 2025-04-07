@@ -9,7 +9,7 @@ class SettingsView(tk.Toplevel):
 
     def __init__(self, cam: Camera, master=None):
         super().__init__(master=master)
-        self.title('Discobox Settings')
+        self.title('Camera Settings')
         self.geometry("720x480")
         self.resizable(width=True, height=True)
         self.cam = cam
