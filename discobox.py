@@ -12,11 +12,14 @@ logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', d
 
 _logger = logging.getLogger(__name__)
 
-from src.settings_view import SettingsView
+from src.camera_settings_view import CameraSettingsView
 from src.select_camera_view import SelectCameraView
+from src.settings_view import SettingsView
 from src.camera_utils import setup_camera, list_cameras, get_camera
 from src.processing import process_images
 from src.thread_with_callback import ThreadWithCallback
+from src.controller import DiscoboxController
+from src.settings import Settings
 
 class UserInterface:
 
@@ -44,9 +47,21 @@ class UserInterface:
         self._build_root_ui()
 
         self.change_state(ui_states.IDLE)
+        
+        self.settings = Settings(
+            led1_on=False, led2_on=False, vent_on=False)
+        ctrl = DiscoboxController()
+        with ctrl as s:
+            s.write(ctrl.set_led1(self.settings.led1))
+            s.write(ctrl.set_led2(self.settings.led2))
+            s.write(ctrl.set_vent(self.settings.vent))
+            s.write(ctrl.set_all_off())
 
     def start(self):
         self.root.mainloop()
+        ctrl = DiscoboxController()
+        with ctrl as s:
+            s.write(ctrl.set_all_off())
 
     def change_state(self, state):
         self.state = state
@@ -87,7 +102,7 @@ class UserInterface:
             self.load_exit_test_run_button.configure(text='Close Test Run', state=tk.NORMAL)
             self.view_controls_parent.grid(column=1, row=1, sticky='ew')
         
-        self.settings_button.configure(state=tk.NORMAL if self.cam else tk.DISABLED)
+        self.camera_settings_button.configure(state=tk.NORMAL if self.cam else tk.DISABLED)
         self.camera_label.configure(text=f'Camera ID: {self.cam.get_id()}' if self.cam else 'No camera selected')
 
     def show_hide_cam(self):
@@ -154,8 +169,14 @@ class UserInterface:
             self.clear_panel()
             self.change_state(ui_states.IDLE)
     
+    def show_camera_settings_window(self):
+        self.camera_settings_view = CameraSettingsView(self.cam, self.root)
+    
     def show_settings_window(self):
-        self.settings = SettingsView(self.cam, self.root)
+        self.settings_view = SettingsView(self.root, self.settings, self.update_settings)
+    
+    def update_settings(self, settings: Settings):
+        self.settings = settings
 
     def analyze_testrun(self):
         thread = ThreadWithCallback(target=process_images, args=(f'output/{self.loaded_test_run}',), callback=self.testrun_analyze_finished)
@@ -291,26 +312,29 @@ class UserInterface:
         self.show_hide_cam_button = tk.Button(self.controls_panel, text='Show Camera', command=self.show_hide_cam)
         self.show_hide_cam_button.grid(column=0, row=1, sticky='ew')
 
-        self.settings_button = tk.Button(self.controls_panel, text='Camera Settings', command=self.show_settings_window)
-        self.settings_button.grid(column=0, row=2, pady=(0, 10), sticky='ew')
+        self.camera_settings_button = tk.Button(self.controls_panel, text='Camera Settings', command=self.show_camera_settings_window)
+        self.camera_settings_button.grid(column=0, row=2, pady=(0, 10), sticky='ew')
+
+        self.settings_button = tk.Button(self.controls_panel, text='Settings', command=self.show_settings_window)
+        self.settings_button.grid(column=0, row=3, pady=(0, 10), sticky='ew')
 
         self.start_stop_button = tk.Button(self.controls_panel, text='Start', command=self.start_stop_test_run, state=tk.DISABLED)
-        self.start_stop_button.grid(column=0, row=3, sticky='ew')
+        self.start_stop_button.grid(column=0, row=4, sticky='ew')
             
         self.pause_resume_button = tk.Button(self.controls_panel, text='Pause', command=self.pause_resume_test_run, state=tk.DISABLED)
-        self.pause_resume_button.grid(column=0, row=4, sticky='ew')
+        self.pause_resume_button.grid(column=0, row=5, sticky='ew')
 
         self.test_run_label = tk.Label(self.controls_panel, text='', anchor='nw', justify='left', wraplength=100)
-        self.test_run_label.grid(column=0, row=5, sticky='ew')
+        self.test_run_label.grid(column=0, row=6, sticky='ew')
 
         self.test_runs = tk.Variable(value=[])
         self.test_runs_list = tk.Listbox(self.controls_panel, listvariable=self.test_runs, selectmode='single')
-        self.test_runs_list.grid(column=0, row=6, pady=(10, 0), sticky='ew')
+        self.test_runs_list.grid(column=0, row=7, pady=(10, 0), sticky='ew')
         self.test_runs_list.bind('<<ListboxSelect>>', self.on_select_test_run)
         self.update_test_runs_list()
 
         self.load_exit_test_run_button = tk.Button(self.controls_panel, text='Load Test Run', command=self.load_close_test_run, state=tk.DISABLED)
-        self.load_exit_test_run_button.grid(column=0, row=7, sticky='ew')
+        self.load_exit_test_run_button.grid(column=0, row=8, sticky='ew')
 
         self.view_controls_parent = tk.Frame(self.frame, padx=10, pady=10)
         self.view_controls_parent.grid(column=1, row=1, sticky='ew')
@@ -349,7 +373,7 @@ class UserInterface:
         self.prev_image_button = tk.Button(self.view_controls, text='<', command=self.show_prev_image, border=0)
         self.prev_image_button.grid(column=5, row=0)
         self.view_page = tk.StringVar()
-        self.view_page_input = tk.Entry(self.view_controls, textvariable=self.view_page, width=2)
+        self.view_page_input = tk.Entry(self.view_controls, textvariable=self.view_page, width=4)
         self.view_page_input.grid(column=6, row=0, padx=(8, 0))
         self.view_page_input.bind('<Return>', self.go_to_image)
         self.view_image_pager = tk.Label(self.view_controls, text='')
