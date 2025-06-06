@@ -2,25 +2,28 @@ import tkinter as tk
 from tkinter import ttk
 from vmbpy import *
 import logging
-from tkinter import font
 
 from .controller import DiscoboxController
 from .settings import Settings
+from .camera_utils import get_feature, set_feature
 
 _logger = logging.getLogger(__name__)
 
 
 class SettingsView(tk.Toplevel):
 
-    def __init__(self, master, settings: Settings, update_settings):
+    def __init__(self, master, cam: Camera, settings: Settings, update_settings):
         super().__init__(master=master)
         self.title('Settings')
         self.resizable(width=False, height=False)
         self.ctrl = DiscoboxController()
+        self.cam = cam
 
-        self.time_value = tk.StringVar(value=str(settings.time))
-        self.time_value.trace_add(mode='write', callback=self.time_value_change)
-        self.fps_value = tk.StringVar(value=str(settings.fps))
+        frame_count = get_feature(self.cam, 'AcquisitionFrameCount')
+        self.frame_count_value = tk.StringVar(value=str(frame_count))
+        self.frame_count_value.trace_add(mode='write', callback=self.frame_count_value_change)
+        fps = get_feature(self.cam, 'AcquisitionFrameRateAbs')
+        self.fps_value = tk.StringVar(value=str(fps))
         self.fps_value.trace_add(mode='write', callback=self.fps_value_change)
 
         self.led1_on = settings.led1_on
@@ -43,31 +46,23 @@ class SettingsView(tk.Toplevel):
         self.frame.grid_rowconfigure(0, weight=1)
         self.frame.grid_columnconfigure(0, weight=1)
 
-
-        self.recording_settings_frame = tk.Frame(self.frame)
-        self.recording_settings_frame.pack(side='top', fill='x', expand='false')
-        label = tk.Label(self.recording_settings_frame, text='Aufnahmeeinstellungen', font=('Noto Sans', 12, 'bold'), anchor='w')
-        label.pack(side='top', fill='both', expand='false', pady=(0, 5))
+        frame = tk.Frame(self.frame)
+        frame.pack(side='top', fill='x', expand='false')
+        label = tk.Label(frame, text='Aufnahmeeinstellungen', font=('Noto Sans', 12, 'bold'), anchor='w')
+        label.pack(side='left', fill='y', expand='false', pady=(0, 5))
 
         recording_settings = [
-            ('Dauer (Sekunden)', self.time_value),
-            ('FPS (Bilder pro Sekunde)', self.fps_value),
+            ('Anzahl Bilder', self.frame_count_value, (0, 180000)),
+            ('FPS (Bilder pro Sekunde)', self.fps_value, (0, 30)),
         ]
 
         for setting in recording_settings:
-            frame = tk.Frame(self.recording_settings_frame)
+            frame = tk.Frame(self.frame)
             frame.pack(side='top', fill='x', expand='false')
             label = tk.Label(frame, text=setting[0], anchor='w', width=22)
             label.pack(side='left', fill='both', expand='false')
-            input = tk.Entry(frame, textvariable=setting[1])
+            input = tk.Spinbox(frame, textvariable=setting[1], from_=setting[2][0], to=setting[2][1])
             input.pack(side='left', fill='both', expand='true')
-
-        self.confirm_frame = tk.Frame(self.recording_settings_frame)
-        button = tk.Button(self.confirm_frame, text='Anwenden', command=self.confirm)
-        button.pack(side='right', fill='x', expand='false', padx=(5, 0))
-        button = tk.Button(self.confirm_frame, text='Zurücksetzen', command=self.cancel, fg="#c40000")
-        button.pack(side='right', fill='x', expand='false')
-
 
         frame = tk.Frame(self.frame)
         frame.pack(side='top', fill='x', expand='false')
@@ -90,28 +85,11 @@ class SettingsView(tk.Toplevel):
             scale = tk.Scale(frame, variable=setting[4], to=255, orient='horizontal', command=setting[3], length=250, sliderlength=20)
             scale.pack(side='right', fill='both', expand='false')
 
-    def time_value_change(self, value, index, mode):
-        if self.settings.time != int(self.time_value.get()):
-            self.confirm_frame.pack(side='top', fill='x', expand='false', pady=(5, 0))
-        else:
-            self.confirm_frame.pack_forget()
+    def frame_count_value_change(self, value, index, mode):
+        set_feature(self.cam, 'AcquisitionFrameCount', self.frame_count_value.get())
 
-    def fps_value_change(self, *args, **kwargs):
-        if self.settings.fps != int(self.fps_value.get()):
-            self.confirm_frame.pack(side='top', fill='x', expand='false', pady=(5, 0))
-        else:
-            self.confirm_frame.pack_forget()
-    
-    def confirm(self):
-        self.settings.time = int(self.time_value.get())
-        self.settings.fps = int(self.fps_value.get())
-        self.update_settings(self.settings)
-        self.confirm_frame.pack_forget()
-    
-    def cancel(self):
-        self.time_value.set(str(self.settings.time))
-        self.fps_value.set(str(self.settings.fps))
-        self.confirm_frame.pack_forget()
+    def fps_value_change(self, value, index, mode):
+        set_feature(self.cam, 'AcquisitionFrameRateAbs', self.fps_value.get())
 
     def toggle_led_1(self):
         with self.ctrl as s:

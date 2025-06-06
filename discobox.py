@@ -7,6 +7,8 @@ import ui_states
 import logging
 import sys
 import os
+import queue
+import threading
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.DEBUG)
 
@@ -15,7 +17,7 @@ _logger = logging.getLogger(__name__)
 from src.camera_settings_view import CameraSettingsView
 from src.select_camera_view import SelectCameraView
 from src.settings_view import SettingsView
-from src.camera_utils import setup_camera, list_cameras, get_camera
+from src.camera_utils import setup_camera, list_cameras, get_camera, set_feature, exec_command
 from src.processing import process_images
 from src.thread_with_callback import ThreadWithCallback
 from src.controller import DiscoboxController
@@ -35,6 +37,8 @@ class UserInterface:
         self.loaded_test_run = None
         self.loaded_test_run_image = 0
         self.show_result_images = False
+
+        self.frame_queue = queue.Queue()
 
         self.state = ui_states.IDLE
 
@@ -108,22 +112,26 @@ class UserInterface:
     def show_hide_cam(self):
         if self.cam.is_streaming():
             self.cam.stop_streaming()
-            self.clear_panel()
         else:
+            set_feature(self.cam, 'AcquisitionMode', 'Continuous')
             # Start Streaming with a custom a buffer of 10 Frames (defaults to 5)
             self.cam.start_streaming(
                 handler=self,
                 buffer_count=10,
                 allocation_mode=AllocationMode.AnnounceFrame)
+            thread = threading.Thread(target=self.frame_processor)
+            thread.start()
         self.change_state(ui_states.IDLE)
 
     def start_stop_test_run(self):
         if self.is_test_run is None:
+            set_feature(self.cam, 'AcquisitionMode', 'MultiFrame')
             self.is_test_run = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
             self.test_run_paused = False
             self.test_run_label.configure(text=f'Test Run:\n{self.is_test_run}')
             os.makedirs(f'output/{self.is_test_run}', exist_ok=True)
             self.change_state(ui_states.TEST_RUN)
+            exec_command(self.cam, 'AcquisitionStart')
         else:
             self.is_test_run = None
             self.test_run_paused = False
@@ -173,7 +181,7 @@ class UserInterface:
         self.camera_settings_view = CameraSettingsView(self.cam, self.root)
     
     def show_settings_window(self):
-        self.settings_view = SettingsView(self.root, self.settings, self.update_settings)
+        self.settings_view = SettingsView(self.root, self.cam, self.settings, self.update_settings)
     
     def update_settings(self, settings: Settings):
         self.settings = settings
@@ -272,29 +280,38 @@ class UserInterface:
 
     def __call__(self, cam: Camera, stream: Stream, frame: Frame):
         # _logger.info('{} acquired {}'.format(cam, frame))
+        self.frame_queue.put(frame)
+    
+    def frame_processor(self):
+        while self.cam.is_streaming():
+            try:
+                frame = self.frame_queue.get(timeout=0.1)
 
-        if frame.get_status() == FrameStatus.Complete:
-            frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height())
-            image_size = (0, 0)
-            ratio = frame.get_width() / frame.get_height()
+                if frame.get_status() == FrameStatus.Complete:
+                    frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height())
+                    image_size = (0, 0)
+                    ratio = frame.get_width() / frame.get_height()
 
-            if frame_size[0] / ratio > frame_size[1]:
-                image_size = (int(frame_size[1] * ratio), frame_size[1])
-            else:
-                image_size = (frame_size[0], int(frame_size[0] / ratio))
+                    if frame_size[0] / ratio > frame_size[1]:
+                        image_size = (int(frame_size[1] * ratio), frame_size[1])
+                    else:
+                        image_size = (frame_size[0], int(frame_size[0] / ratio))
 
-            img = Image.fromarray(frame.as_numpy_ndarray()[:, :, 0], mode='L')
-            
-            if self.is_test_run is not None and not self.test_run_paused:
-                img.save(f'output/{self.is_test_run}/{self.is_test_run}-{frame.get_id():06}.bmp')
+                    img = Image.fromarray(frame.as_numpy_ndarray()[:, :, 0], mode='L')
+                    
+                    if self.is_test_run is not None and not self.test_run_paused:
+                        img.save(f'output/{self.is_test_run}/{self.is_test_run}-{frame.get_id():06}.bmp')
 
-            img = img.resize(image_size)
-            img = ImageTk.PhotoImage(img)
+                    img = img.resize(image_size)
+                    img = ImageTk.PhotoImage(img)
 
-            self.panel.configure(image=img)
-            self.panel.image = img
+                    self.panel.configure(image=img)
+                    self.panel.image = img
 
-        cam.queue_frame(frame)
+                self.cam.queue_frame(frame)
+            except queue.Empty:
+                continue
+        self.clear_panel()
     
     def _build_root_ui(self):
         self.frame = tk.Frame(self.root)

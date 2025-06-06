@@ -71,3 +71,27 @@ def setup_camera(cam: Camera):
                 pass
         except (AttributeError, VmbFeatureError):
             pass
+
+
+def get_feature(cam: Camera, feat_name):
+    if not hasattr(cam, feat_name):
+        _logger.warning(f'Feature does not exist: {feat_name}')
+        return
+    _logger.info(f'Get feature {feat_name}')
+    return getattr(cam, feat_name).get()
+
+
+def set_feature(cam: Camera, feat_name, value):
+    if not hasattr(cam, feat_name):
+        _logger.warning(f'Feature does not exist: {feat_name}')
+        return
+    _logger.info(f'Set feature {feat_name} to {value}')
+    getattr(cam, feat_name).set(value)
+
+
+def exec_command(cam: Camera, feat_name):
+    if not hasattr(cam, feat_name):
+        _logger.warning(f'Feature does not exist: {feat_name}')
+        return
+    _logger.info(f'Run feature {feat_name}')
+    getattr(cam, feat_name).run()

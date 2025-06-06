@@ -2,10 +2,20 @@ import tkinter as tk
 from vmbpy import *
 import logging
 
+from .camera_utils import set_feature, exec_command
+
 _logger = logging.getLogger(__name__)
 
 
 class CameraSettingsView(tk.Toplevel):
+    """
+    AcquisitionFrameCount
+    AcquisitionFrameRateAbs
+    AcquisitionMode MultiFrame
+    
+    FrameStart Trigger Off
+    
+    """
 
     def __init__(self, cam: Camera, master=None):
         super().__init__(master=master)
@@ -16,6 +26,11 @@ class CameraSettingsView(tk.Toplevel):
         self._build_settings_ui()
 
     def _build_settings_ui(self):
+        # self.frame = tk.Frame(self)
+        # self.frame.pack(side='top', fill='both', expand='true', padx=(10, 10), pady=(10, 10))
+        # self.frame.grid_rowconfigure(0, weight=1)
+        # self.frame.grid_columnconfigure(0, weight=1)
+        
         self.frame = tk.Frame(self)
         self.frame.grid()
 
@@ -37,17 +52,38 @@ class CameraSettingsView(tk.Toplevel):
         self.exposure_time_value = tk.StringVar(value=exposure_time_feature.get())
         self.exposure_time_input = tk.Scale(self.controls_panel, from_=48, to=90_000_000, orient='horizontal', command=self.set_exposure_time_value, width=30)
         self.exposure_time_input.grid(column=1, row=1)
+
+        self.set_def_button = tk.Button(self.controls_panel, text='Set Default', command=self.set_def)
+        self.set_def_button.grid(column=0, row=2)
+        self.record_button = tk.Button(self.controls_panel, text='Record', command=self.record)
+        self.record_button.grid(column=0, row=3)
     
     def set_exposure_auto_value(self, value):
-        self._set_feature('ExposureAuto', value)
+        set_feature(self.cam, 'ExposureAuto', value)
 
     def set_exposure_time_value(self, value):
-        self._set_feature('ExposureTimeAbs', value)
+        set_feature(self.cam, 'ExposureTimeAbs', value)
 
-    def _set_feature(self, feat_name, value):
-        if not hasattr(self.cam, feat_name):
-            _logger.warning(f'Feature does not exist: {feat_name}')
-            return
-        _logger.info(f'Set feature {feat_name} to {value}')
-        getattr(self.cam, feat_name).set(value)
 
+    def set_def(self):
+        set_feature(self.cam, 'AcquisitionFrameCount', 50)
+        set_feature(self.cam, 'AcquisitionFrameRateAbs', 20)
+        set_feature(self.cam, 'AcquisitionMode', 'Continuous')
+        set_feature(self.cam, 'TriggerSelector', 'FrameStart')
+        set_feature(self.cam, 'TriggerMode', 'On')
+        set_feature(self.cam, 'TriggerSource', 'FixedRate')
+        exec_command(self.cam, 'AcquisitionStart')
+    
+    def record(self):
+        set_feature(self.cam, 'AcquisitionMode', 'MultiFrame')
+        exec_command(self.cam, 'AcquisitionStart')
+
+        # attrib = getattr(self.cam, 'AcquisitionEnd')
+        # object_methods = [method_name for method_name in dir(attrib)
+        #           if callable(getattr(attrib, method_name))]
+        # for method in object_methods:
+        #     print(method)
+
+        print(f'{self.cam.get_all_features()}')
+        # self.cam.save_settings()
+        # self.cam.load_settings()
