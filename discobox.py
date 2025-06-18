@@ -224,7 +224,7 @@ class UserInterface:
     def show_last_image(self):
         self.show_image(-1)
 
-    def go_to_image(self, value):
+    def go_to_image(self, value, index, mode):
         try:
             self.show_image(int(self.view_page.get()) - 1)
         except:
@@ -409,7 +409,7 @@ class UserInterface:
         self.view_page = tk.StringVar()
         self.view_page_input = tk.Entry(self.view_controls, textvariable=self.view_page, width=4)
         self.view_page_input.grid(column=6, row=0, padx=(8, 0))
-        self.view_page_input.bind('<Return>', self.go_to_image)
+        self.view_page.trace_add(mode='write', callback=self.go_to_image)
         self.view_image_pager = tk.Label(self.view_controls, text='')
         self.view_image_pager.grid(column=7, row=0, padx=(0, 8))
         self.next_image_button = tk.Button(self.view_controls, text='>', command=self.show_next_image, border=0)
