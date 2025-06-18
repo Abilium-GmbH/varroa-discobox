@@ -1,5 +1,8 @@
 import serial
-import time
+import serial.tools.list_ports
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 COMMANDS = {
@@ -17,8 +20,13 @@ COMMANDS = {
 class DiscoboxController():
 
     def __init__(self):
-        self.port = serial.Serial(
-            port='/dev/ttyACM0', baudrate=9600)
+        ports = serial.tools.list_ports.comports()
+        for port in ports:
+            if port.manufacturer and (port.manufacturer.find('Arduino')
+                                      or port.manufacturer.find('arduino')):
+                _logger.info(f'USB Port: {port.device} - {port.manufacturer}')
+                self.port = serial.Serial(port=port.device, baudrate=9600)
+                break
         
     def __enter__(self, *args, **kwargs):
         return self.port.__enter__(*args, **kwargs)
