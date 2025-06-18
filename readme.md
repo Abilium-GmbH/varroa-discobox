@@ -9,17 +9,17 @@
     1. reboot your PC
 1. Find the IPv4 address of your camera:
     - using `ifconfig`:\
-    [ifconfig](./imgs/ifconfig.png)
-    - using `ping -b 255.255.255.255` (turn off your WiFi connection):\
-    [ping](./imgs/ping.png)
+    ![ifconfig](./imgs/ifconfig.png)
+    - or using `ping -b 255.255.255.255` (turn off your WiFi connection):\
+    ![ping](./imgs/ping.png)
 1. Setup Network configuration
     1. go to `Settings > Network > PCI Ethernet`\
-    [settings](./imgs/settings.png)
+    ![settings](./imgs/settings.png)
     1. click on `Add Ethernet Connection`
     1. go to tab `IPv4`
     1. set the `IPv4 Method` to manual
     1. add a line in Addresses with the IP Address of your camera in `Address` and `Gateway` and set the `Netmask` to `255.255.255.0`\
-    [connection](./imgs/connection.png)
+    ![connection](./imgs/connection.png)
     1. click on apply and select the created connection
 1. Start Vimba Viewer:
     1. launch Vimba Viewer from `./VimbaX_Setup-2024-1-Linux64/VimbaX_2024-1/bin/VimbaXViewer`
