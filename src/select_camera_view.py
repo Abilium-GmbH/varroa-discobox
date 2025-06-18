@@ -38,7 +38,7 @@ class SelectCameraView(tk.Tk):
         self.select_camera_button = tk.Button(self.frame, text='Select Camera', command=self.select_camera, width=15)
         self.select_camera_button.pack(side='top', fill="x", expand="false")
 
-        self.no_camera_button = tk.Button(self.frame, text='Start with no Camera', command=self.no_camera, width=15)
+        self.no_camera_button = tk.Button(self.frame, text='Start without Camera', command=self.no_camera, width=15)
         self.no_camera_button.pack(side='top', fill="x", expand="false")
 
     def select_camera(self):

@@ -48,12 +48,12 @@ class SettingsView(tk.Toplevel):
 
         frame = tk.Frame(self.frame)
         frame.pack(side='top', fill='x', expand='false')
-        label = tk.Label(frame, text='Aufnahmeeinstellungen', font=('Noto Sans', 12, 'bold'), anchor='w')
+        label = tk.Label(frame, text='Recording', font=('Noto Sans', 12, 'bold'), anchor='w')
         label.pack(side='left', fill='y', expand='false', pady=(0, 5))
 
         recording_settings = [
-            (f'Anzahl Bilder [{FRAME_COUNT_RANGE[0]}, {FRAME_COUNT_RANGE[1]}]', self.frame_count_value, FRAME_COUNT_RANGE),
-            (f'FPS (Bilder pro Sekunde) [{FPS_RANGE[0]}, {FPS_RANGE[1]}]', self.fps_value, FPS_RANGE),
+            (f'Number of Frames [{FRAME_COUNT_RANGE[0]}, {FRAME_COUNT_RANGE[1]}]', self.frame_count_value, FRAME_COUNT_RANGE),
+            (f'FPS (Frames per second) [{FPS_RANGE[0]}, {FPS_RANGE[1]}]', self.fps_value, FPS_RANGE),
         ]
 
         for setting in recording_settings:
@@ -66,7 +66,7 @@ class SettingsView(tk.Toplevel):
 
         frame = tk.Frame(self.frame)
         frame.pack(side='top', fill='x', expand='false')
-        label = tk.Label(frame, text='LEDs und Ventilator', font=('Noto Sans', 12, 'bold'), anchor='w')
+        label = tk.Label(frame, text='LEDs & Fan', font=('Noto Sans', 12, 'bold'), anchor='w')
         label.pack(side='left', fill='y', expand='false', pady=(10, 5))
 
         led_vent_settings = [
