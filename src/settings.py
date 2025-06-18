@@ -3,7 +3,7 @@
 class Settings():
 
     def __init__(self, **kwargs):
-        self.time = kwargs.get('time', 120)
+        self.frame_count = kwargs.get('frame_count', 100)
         self.fps = kwargs.get('fps', 10)
         self.led1_on = kwargs.get('led1_on', False)
         self.led1 = kwargs.get('led1', 255)

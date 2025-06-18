@@ -14,10 +14,9 @@ logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', d
 
 _logger = logging.getLogger(__name__)
 
-from src.camera_settings_view import CameraSettingsView
 from src.select_camera_view import SelectCameraView
 from src.settings_view import SettingsView
-from src.camera_utils import setup_camera, list_cameras, get_camera, set_feature, exec_command
+from src.camera_utils import setup_camera, list_cameras, get_camera, set_feature, get_feature, exec_command
 from src.processing import process_images
 from src.thread_with_callback import ThreadWithCallback
 from src.controller import DiscoboxController
@@ -39,6 +38,7 @@ class UserInterface:
         self.show_result_images = False
 
         self.frame_queue = queue.Queue()
+        self.frame_count = 0
 
         self.state = ui_states.IDLE
 
@@ -52,7 +52,9 @@ class UserInterface:
 
         self.change_state(ui_states.IDLE)
         
+        fps = get_feature(self.cam, 'AcquisitionFrameRateAbs')
         self.settings = Settings(
+            frame_count=100, fps=fps,
             led1_on=False, led2_on=False, vent_on=False)
         ctrl = DiscoboxController()
         with ctrl as s:
@@ -63,6 +65,8 @@ class UserInterface:
 
     def start(self):
         self.root.mainloop()
+        if self.cam and self.cam.is_streaming():
+            self.cam.stop_streaming()
         ctrl = DiscoboxController()
         with ctrl as s:
             s.write(ctrl.set_all_off())
@@ -73,9 +77,11 @@ class UserInterface:
             if self.cam and self.cam.is_streaming():
                 self.show_hide_cam_button.configure(text='Close Camera', state=tk.NORMAL)
                 self.start_stop_button.configure(text='Start Test Run', state=tk.NORMAL)
+                self.fps_label.grid(column=0, columnspan=2, row=0, sticky='ne')
             else:
                 self.show_hide_cam_button.configure(text='Show Camera', state=tk.NORMAL if self.cam else tk.DISABLED)
                 self.start_stop_button.configure(text='Start Test Run', state=tk.DISABLED)
+                self.fps_label.grid_forget()
 
             self.pause_resume_button.configure(text='Pause Test Run', state=tk.DISABLED)
             self.test_runs_list.configure(state=tk.NORMAL)
@@ -104,16 +110,22 @@ class UserInterface:
             self.pause_resume_button.configure(text='Pause Test Run', state=tk.DISABLED)
             self.test_runs_list.configure(state=tk.DISABLED)
             self.load_exit_test_run_button.configure(text='Close Test Run', state=tk.NORMAL)
-            self.view_controls_parent.grid(column=1, row=1, sticky='ew')
+            self.view_controls_parent.grid(column=1, row=2, sticky='ew')
         
-        self.camera_settings_button.configure(state=tk.NORMAL if self.cam else tk.DISABLED)
-        self.camera_label.configure(text=f'Camera ID: {self.cam.get_id()}' if self.cam else 'No camera selected')
+        self.settings_button.configure(state=tk.NORMAL if self.cam else tk.DISABLED)
+        self.title.configure(text=f'Camera: {self.cam.get_model()} {self.cam.get_id()}' if self.cam else 'No camera selected')
 
     def show_hide_cam(self):
         if self.cam.is_streaming():
             self.cam.stop_streaming()
         else:
+            self.cam.UserSetSelector.set('Default')
+            set_feature(self.cam, 'ExposureAuto', 'Continuous')
             set_feature(self.cam, 'AcquisitionMode', 'Continuous')
+            set_feature(self.cam, 'AcquisitionFrameCount', 65535)
+            set_feature(self.cam, 'TriggerSelector', 'FrameStart')
+            set_feature(self.cam, 'TriggerMode', 'On')
+            set_feature(self.cam, 'TriggerSource', 'FixedRate')
             # Start Streaming with a custom a buffer of 10 Frames (defaults to 5)
             self.cam.start_streaming(
                 handler=self,
@@ -125,13 +137,12 @@ class UserInterface:
 
     def start_stop_test_run(self):
         if self.is_test_run is None:
-            set_feature(self.cam, 'AcquisitionMode', 'MultiFrame')
-            self.is_test_run = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+            self.is_test_run = datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + f'_fps-{self.settings.fps}'
             self.test_run_paused = False
+            self.frame_count = 0
             self.test_run_label.configure(text=f'Test Run:\n{self.is_test_run}')
             os.makedirs(f'output/{self.is_test_run}', exist_ok=True)
             self.change_state(ui_states.TEST_RUN)
-            exec_command(self.cam, 'AcquisitionStart')
         else:
             self.is_test_run = None
             self.test_run_paused = False
@@ -177,25 +188,19 @@ class UserInterface:
             self.clear_panel()
             self.change_state(ui_states.IDLE)
     
-    def show_camera_settings_window(self):
-        self.camera_settings_view = CameraSettingsView(self.cam, self.root)
-    
     def show_settings_window(self):
-        self.settings_view = SettingsView(self.root, self.cam, self.settings, self.update_settings)
-    
-    def update_settings(self, settings: Settings):
-        self.settings = settings
+        self.settings_view = SettingsView(self.root, self.cam, self.settings)
 
     def analyze_testrun(self):
         thread = ThreadWithCallback(target=process_images, args=(f'output/{self.loaded_test_run}',), callback=self.testrun_analyze_finished)
         self.view_controls_parent.grid_forget()
-        self.analyze_progressbar_parent.grid(column=1, row=1, sticky='ew')
+        self.analyze_progressbar_parent.grid(column=1, row=2, sticky='ew')
         self.analyze_progressbar.start()
         self.load_exit_test_run_button.configure(state=tk.DISABLED)
         thread.start()
 
     def testrun_analyze_finished(self):
-        self.view_controls_parent.grid(column=1, row=1, sticky='ew')
+        self.view_controls_parent.grid(column=1, row=2, sticky='ew')
         self.analyze_progressbar_parent.grid_forget()
         self.analyze_progressbar.stop()
         self.load_exit_test_run_button.configure(state=tk.NORMAL)
@@ -253,7 +258,7 @@ class UserInterface:
         self.next_image_button.configure(state=tk.DISABLED if self.loaded_test_run_image == len(images) - 1 else tk.NORMAL)
         self.last_image_button.configure(state=tk.DISABLED if self.loaded_test_run_image == len(images) - 1 else tk.NORMAL)
 
-        frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.view_controls_parent.winfo_height())
+        frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.view_controls_parent.winfo_height() - self.title.winfo_height())
         image_size = (0, 0)
         ratio = img.width / img.height
 
@@ -279,7 +284,7 @@ class UserInterface:
             self.show_image(self.loaded_test_run_image)
 
     def __call__(self, cam: Camera, stream: Stream, frame: Frame):
-        # _logger.info('{} acquired {}'.format(cam, frame))
+        self.stream = stream
         self.frame_queue.put(frame)
     
     def frame_processor(self):
@@ -288,7 +293,7 @@ class UserInterface:
                 frame = self.frame_queue.get(timeout=0.1)
 
                 if frame.get_status() == FrameStatus.Complete:
-                    frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height())
+                    frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.title.winfo_height())
                     image_size = (0, 0)
                     ratio = frame.get_width() / frame.get_height()
 
@@ -298,9 +303,16 @@ class UserInterface:
                         image_size = (frame_size[0], int(frame_size[0] / ratio))
 
                     img = Image.fromarray(frame.as_numpy_ndarray()[:, :, 0], mode='L')
+                    fps = round(self.stream.get_feature_by_name("FrameRate").get(), 1)
                     
                     if self.is_test_run is not None and not self.test_run_paused:
+                        self.frame_count += 1
+                        self.fps_label.configure(text=f'FPS {fps}    Frame {self.frame_count}/{self.settings.frame_count}')
                         img.save(f'output/{self.is_test_run}/{self.is_test_run}-{frame.get_id():06}.bmp')
+                        if self.frame_count >= self.settings.frame_count:
+                            self.start_stop_test_run()
+                    else:
+                        self.fps_label.configure(text=f'FPS: {fps}')
 
                     img = img.resize(image_size)
                     img = ImageTk.PhotoImage(img)
@@ -311,29 +323,34 @@ class UserInterface:
                 self.cam.queue_frame(frame)
             except queue.Empty:
                 continue
-        self.clear_panel()
+            except RuntimeError:
+                break
+        
+        try:
+            self.clear_panel()
+        except:
+            pass
     
     def _build_root_ui(self):
         self.frame = tk.Frame(self.root)
         self.frame.grid()
 
+        self.title = tk.Label(self.frame, text='No camera selected', font=('Noto Sans', 12, 'bold'), padx=10, pady=5)
+        self.title.grid(column=0, columnspan=2, row=0, sticky='nw')
+        self.fps_label = tk.Label(self.frame, text='FPS: 0.0', font=('Noto Sans', 12), padx=10, pady=5)
+        self.fps_label.grid(column=0, columnspan=2, row=0, sticky='ne')
+
         self.panel = tk.Label(self.frame)
-        self.panel.grid(column=1, row=0)
+        self.panel.grid(column=1, row=1)
 
-        self.controls_panel = tk.Frame(self.frame, width=5, padx=10, pady=10)
-        self.controls_panel.grid(column=0, row=0, sticky='NW')
+        self.controls_panel = tk.Frame(self.frame, padx=10)
+        self.controls_panel.grid(column=0, row=1, sticky='NW')
 
-        self.camera_label = tk.Label(self.controls_panel, text='No camera selected', anchor='nw', justify='left', wraplength=100)
-        self.camera_label.grid(column=0, row=0, padx=(0, 0), pady=(0, 0), sticky='ew')
-
-        self.show_hide_cam_button = tk.Button(self.controls_panel, text='Show Camera', command=self.show_hide_cam)
+        self.show_hide_cam_button = tk.Button(self.controls_panel, width=22, text='Show Camera', command=self.show_hide_cam)
         self.show_hide_cam_button.grid(column=0, row=1, sticky='ew')
 
-        self.camera_settings_button = tk.Button(self.controls_panel, text='Camera Settings', command=self.show_camera_settings_window)
-        self.camera_settings_button.grid(column=0, row=2, pady=(0, 10), sticky='ew')
-
         self.settings_button = tk.Button(self.controls_panel, text='Settings', command=self.show_settings_window)
-        self.settings_button.grid(column=0, row=3, pady=(0, 10), sticky='ew')
+        self.settings_button.grid(column=0, row=2, pady=(0, 10), sticky='ew')
 
         self.start_stop_button = tk.Button(self.controls_panel, text='Start', command=self.start_stop_test_run, state=tk.DISABLED)
         self.start_stop_button.grid(column=0, row=4, sticky='ew')
@@ -341,7 +358,7 @@ class UserInterface:
         self.pause_resume_button = tk.Button(self.controls_panel, text='Pause', command=self.pause_resume_test_run, state=tk.DISABLED)
         self.pause_resume_button.grid(column=0, row=5, sticky='ew')
 
-        self.test_run_label = tk.Label(self.controls_panel, text='', anchor='nw', justify='left', wraplength=100)
+        self.test_run_label = tk.Label(self.controls_panel, text='', anchor='nw', justify='left', wraplength=200)
         self.test_run_label.grid(column=0, row=6, sticky='ew')
 
         self.test_runs = tk.Variable(value=[])
@@ -354,7 +371,7 @@ class UserInterface:
         self.load_exit_test_run_button.grid(column=0, row=8, sticky='ew')
 
         self.view_controls_parent = tk.Frame(self.frame, padx=10, pady=10)
-        self.view_controls_parent.grid(column=1, row=1, sticky='ew')
+        self.view_controls_parent.grid(column=1, row=2, sticky='ew')
         self.view_controls_parent.grid_rowconfigure(0, weight=1)
         self.view_controls_parent.grid_columnconfigure(0, weight=1)
 

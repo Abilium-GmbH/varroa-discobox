@@ -2,9 +2,9 @@ import tkinter as tk
 from vmbpy import *
 import logging
 
-_logger = logging.getLogger(__name__)
-
 from .camera_utils import get_all_cameras
+
+_logger = logging.getLogger(__name__)
 
 
 class SelectCameraView(tk.Tk):
@@ -15,8 +15,7 @@ class SelectCameraView(tk.Tk):
         self.start_without_cam = start_without_cam
 
         self.title('Select Camera')
-        self.geometry("480x480")
-        self.resizable(width=True, height=True)
+        self.resizable(width=False, height=False)
         self.cams = get_all_cameras()
         self._build_settings_ui()
 
@@ -25,25 +24,22 @@ class SelectCameraView(tk.Tk):
 
     def _build_settings_ui(self):
         self.frame = tk.Frame(self)
-        self.frame.pack(side='top', fill="both", expand="true")
+        self.frame.pack(side='top', fill="both", expand="true", padx=(10, 10), pady=(10, 10))
         self.frame.grid_rowconfigure(0, weight=1)
         self.frame.grid_columnconfigure(0, weight=1)
 
-        self.controls_panel = tk.Frame(self.frame, padx=10, pady=10)
-        self.controls_panel.pack(side='top', fill="both", expand="true")
-        self.controls_panel.grid_rowconfigure(0, weight=1)
-        self.controls_panel.grid_columnconfigure(0, weight=1)
-
         self.cameras = tk.Variable(value=[])
         self.cameras.set(sorted([f'{cam.get_model()} {cam.get_id()}' for cam in self.cams]))
-        self.cameras_list = tk.Listbox(self.controls_panel, listvariable=self.cameras, selectmode='single')
-        self.cameras_list.pack(side='top', fill="both", expand="true", pady=10)
+        self.cameras_list = tk.Listbox(self.frame, listvariable=self.cameras, selectmode='single', height=5, width=0)
+        self.cameras_list.pack(side='top', fill="x", expand="false", pady=10)
+        if len(self.cams) > 0:
+            self.cameras_list.selection_set(0)
 
-        self.select_camera_button = tk.Button(self.controls_panel, text='Select Camera', command=self.select_camera, width=15)
-        self.select_camera_button.pack(side='top', fill="both", expand="false")
+        self.select_camera_button = tk.Button(self.frame, text='Select Camera', command=self.select_camera, width=15)
+        self.select_camera_button.pack(side='top', fill="x", expand="false")
 
-        self.no_camera_button = tk.Button(self.controls_panel, text='Start with no Camera', command=self.no_camera, width=15)
-        self.no_camera_button.pack(side='top', fill="both", expand="false")
+        self.no_camera_button = tk.Button(self.frame, text='Start with no Camera', command=self.no_camera, width=15)
+        self.no_camera_button.pack(side='top', fill="x", expand="false")
 
     def select_camera(self):
         selected = [self.cameras_list.get(i) for i in self.cameras_list.curselection()]
