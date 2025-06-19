@@ -20,10 +20,12 @@ fi
 sdk_path=$1
 sdk_path=${sdk_path%"/"}
 
+printf "path=$sdk_path" >> vimbax.config
+
 file=$(find $1 -path "*/api/python/*" -name "*.whl")
 
 sudo apt update
-sudo apt install python3-tk
+sudo apt -y install python3-tk
 
 python3 -m venv venv
 source ./venv/bin/activate
