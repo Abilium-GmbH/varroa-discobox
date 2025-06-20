@@ -183,10 +183,12 @@ class UserInterface:
             self.loaded_test_run = selected[0]
             self.change_state(ui_states.VIEW)
             self.show_image()
+            self.update_has_results()
         else:
             self.loaded_test_run = None
             self.clear_panel()
             self.change_state(ui_states.IDLE)
+            self.update_has_results()
     
     def show_settings_window(self):
         self.settings_view = SettingsView(self.root, self.cam, self.settings)
@@ -204,11 +206,24 @@ class UserInterface:
         self.analyze_progressbar_parent.grid_forget()
         self.analyze_progressbar.stop()
         self.load_exit_test_run_button.configure(state=tk.NORMAL)
+        self.update_has_results()
 
     def show_hide_results(self):
         self.show_result_images = not self.show_result_images
         self.show_hide_results_button.configure(text='Show testrun images' if self.show_result_images else 'Show results')
+        if self.show_result_images:
+            self.analyze_button.grid_forget()
+        else:
+            self.analyze_button.grid(column=1, row=0, padx=(0, 20))
         self.show_first_image()
+
+    def update_has_results(self):
+        if not self.loaded_test_run:
+            return
+
+        path = f'output/{self.loaded_test_run}/results'
+        if not self.show_result_images and not os.path.exists(path):
+            self.show_hide_results_button.configure(state=tk.DISABLED)
 
     def show_first_image(self):
         self.show_image(0)
