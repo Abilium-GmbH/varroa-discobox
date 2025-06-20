@@ -20,7 +20,7 @@ fi
 sdk_path=$1
 sdk_path=${sdk_path%"/"}
 
-printf "path=$sdk_path" >> vimbax.config
+printf "path=$sdk_path" > vimbax.config
 
 file=$(find $1 -path "*/api/python/*" -name "*.whl")
 

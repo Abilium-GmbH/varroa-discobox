@@ -1,5 +1,7 @@
 
-## Setup your Allied Vision Mako Camera:
+## Usage Guide
+
+### 1. Setup your Allied Vision Mako Camera:
 
 1. Install Vimba X:
     1. download the [Vimba X SDK](https://www.alliedvision.com/en/products/software/vimba-x-sdk/)\
@@ -30,14 +32,26 @@
         1. click on `Action > Open Camera by IP`
         1. enter the IP address of your camera and click on `OK`
 
-## Setup the python environment
+    If you can select your camera and open the stream, your camera is set up correctly and your good to go.
+
+### 2. Set user access rights
+
+1. Make sure the user has `sudo` privileges.
+1. Add the user to the `dialout` group:
+    ```terminal
+    sudo adduser <user_name> dialout
+    ```
+    You can find your user name by executing `whoami` in the terminal
+1. Reboot your PC.
+
+### 3. Setup the python environment
 
 Make sure to enter the correct path to your VimbaX installation, e.g., *../VimbaX_Setup-2025-1-Linux64/*\
 ```terminal
 ./setup-python-env.sh <VimbaX SDK Path>
 ```
 
-## Execute the Discobox app
+### 4. Execute the Discobox app
 
 ```terminal
 ./run-discobox.sh
@@ -56,7 +70,9 @@ Make sure to enter the correct path to your VimbaX installation, e.g., *../Vimba
     ./run-discobox.sh <Camera ID>
     ```
 
-## Develop using the Python API
+## Development
+
+### Develop using the Python API
 
 1. Create a virtual environment:
     ```terminal

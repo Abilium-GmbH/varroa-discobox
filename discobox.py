@@ -308,7 +308,7 @@ class UserInterface:
                     if self.is_test_run is not None and not self.test_run_paused:
                         self.frame_count += 1
                         self.fps_label.configure(text=f'FPS {fps}    Frame {self.frame_count}/{self.settings.frame_count}')
-                        img.save(f'output/{self.is_test_run}/{self.is_test_run}-{frame.get_id():06}.bmp')
+                        img.save(f'output/{self.is_test_run}/{self.is_test_run}_{frame.get_id():06}.bmp')
                         if self.frame_count >= self.settings.frame_count:
                             self.start_stop_test_run()
                     else:
