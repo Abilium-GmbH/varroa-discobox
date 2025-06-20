@@ -17,9 +17,15 @@ COMMANDS = {
 }
 
 
+class DummyPort():
+    def write(*args, **kwargs):
+        pass
+
+
 class DiscoboxController():
 
     def __init__(self):
+        self.port = None
         ports = serial.tools.list_ports.comports()
         for port in ports:
             if port.manufacturer and (port.manufacturer.find('Arduino')
@@ -29,9 +35,13 @@ class DiscoboxController():
                 break
         
     def __enter__(self, *args, **kwargs):
+        if self.port is None:
+            return DummyPort()
         return self.port.__enter__(*args, **kwargs)
     
     def __exit__(self, *args, **kwargs):
+        if self.port is None:
+            return
         self.port.__exit__(*args, **kwargs)
 
     def set_vent(self, val: int):
