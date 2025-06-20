@@ -1,6 +1,7 @@
 import serial
 import serial.tools.list_ports
 import logging
+import threading
 
 _logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ class DiscoboxController():
 
     def __init__(self):
         self.port = None
+        self.port_open = False
+
         ports = serial.tools.list_ports.comports()
         for port in ports:
             if port.manufacturer and (port.manufacturer.find('Arduino')
@@ -33,16 +36,39 @@ class DiscoboxController():
                 _logger.info(f'USB Port: {port.device} - {port.manufacturer}')
                 self.port = serial.Serial(port=port.device, baudrate=9600)
                 break
+
+    def start(self):
+        if not self.port:
+            return
+        
+        self.s = self.port.__enter__()
+        self.port_open = True
+        self.thread = threading.Thread(target=self.read_port, args=(self.port,))
+        self.thread.start()
+    
+    def stop(self):
+        if not self.port:
+            return
+
+        self.port_open = False
+        self.thread.join()
+        self.port.__exit__()
+        self.s = None
+
+    def read_port(self, port: serial.Serial):
+        while self.port_open:
+            data = port.read(1)
+            # _logger.info(f'serial read: {data}')
         
     def __enter__(self, *args, **kwargs):
         if self.port is None:
             return DummyPort()
-        return self.port.__enter__(*args, **kwargs)
+        return self.s
     
     def __exit__(self, *args, **kwargs):
         if self.port is None:
             return
-        self.port.__exit__(*args, **kwargs)
+        self.s.flush()
 
     def set_vent(self, val: int):
         return self._get_packet(

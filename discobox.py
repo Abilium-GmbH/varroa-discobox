@@ -56,20 +56,21 @@ class UserInterface:
         self.settings = Settings(
             frame_count=100, fps=fps,
             led1_on=False, led2_on=False, vent_on=False)
-        ctrl = DiscoboxController()
-        with ctrl as s:
-            s.write(ctrl.set_led1(self.settings.led1))
-            s.write(ctrl.set_led2(self.settings.led2))
-            s.write(ctrl.set_vent(self.settings.vent))
-            s.write(ctrl.set_all_off())
+        self.ctrl = DiscoboxController()
+        self.ctrl.start()
+        with self.ctrl as s:
+            s.write(self.ctrl.set_led1(self.settings.led1))
+            s.write(self.ctrl.set_led2(self.settings.led2))
+            s.write(self.ctrl.set_vent(self.settings.vent))
+            s.write(self.ctrl.set_all_off())
 
     def start(self):
         self.root.mainloop()
         if self.cam and self.cam.is_streaming():
             self.cam.stop_streaming()
-        ctrl = DiscoboxController()
-        with ctrl as s:
-            s.write(ctrl.set_all_off())
+        with self.ctrl as s:
+            s.write(self.ctrl.set_all_off())
+        self.ctrl.stop()
 
     def change_state(self, state):
         self.state = state
@@ -191,7 +192,7 @@ class UserInterface:
             self.update_has_results()
     
     def show_settings_window(self):
-        self.settings_view = SettingsView(self.root, self.cam, self.settings)
+        self.settings_view = SettingsView(self.root, self.cam, self.settings, self.ctrl)
 
     def analyze_testrun(self):
         thread = ThreadWithCallback(target=process_images, args=(f'output/{self.loaded_test_run}',), callback=self.testrun_analyze_finished)

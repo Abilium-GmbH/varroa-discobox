@@ -16,11 +16,11 @@ FPS_RANGE = (1, 33)
 
 class SettingsView(tk.Toplevel):
 
-    def __init__(self, master, cam: Camera, settings: Settings):
+    def __init__(self, master, cam: Camera, settings: Settings, ctrl: DiscoboxController):
         super().__init__(master=master)
         self.title('Settings')
         self.resizable(width=False, height=False)
-        self.ctrl = DiscoboxController()
+        self.ctrl = ctrl
         self.cam = cam
 
         self.frame_count_value = tk.StringVar(value=str(settings.frame_count))
