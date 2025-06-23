@@ -226,6 +226,8 @@ class UserInterface:
         path = f'output/{self.loaded_test_run}/results'
         if not self.show_result_images and not os.path.exists(path):
             self.show_hide_results_button.configure(state=tk.DISABLED)
+        else:
+            self.show_hide_results_button.configure(state=tk.NORMAL)
 
     def show_first_image(self):
         self.show_image(0)
