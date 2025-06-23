@@ -3,6 +3,8 @@ import serial.tools.list_ports
 import logging
 import threading
 
+from .select_serial_view import SelectSerialView
+
 _logger = logging.getLogger(__name__)
 
 
@@ -25,17 +27,31 @@ class DummyPort():
 
 class DiscoboxController():
 
-    def __init__(self):
+    def __init__(self, no_con=False):
         self.port = None
         self.port_open = False
+        
+        if no_con:
+            return
 
         ports = serial.tools.list_ports.comports()
-        for port in ports:
+        ports = [
+            port for port in ports
             if port.manufacturer and (port.manufacturer.find('Arduino')
-                                      or port.manufacturer.find('arduino')):
-                _logger.info(f'USB Port: {port.device} - {port.manufacturer}')
-                self.port = serial.Serial(port=port.device, baudrate=9600)
-                break
+                                      or port.manufacturer.find('arduino'))]
+        
+        if len(ports) == 0:
+            return
+        elif len(ports) == 1:
+            self.select_serial(ports[0].device)
+        else:
+            SelectSerialView(self.select_serial, ports).start()
+    
+    def select_serial(self, device=None):
+        if device is None:
+            return
+        
+        self.port = serial.Serial(port=device, baudrate=9600)
 
     def start(self):
         if not self.port:

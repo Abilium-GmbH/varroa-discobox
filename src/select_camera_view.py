@@ -17,12 +17,12 @@ class SelectCameraView(tk.Tk):
         self.title('Select Camera')
         self.resizable(width=False, height=False)
         self.cams = get_all_cameras()
-        self._build_settings_ui()
+        self._build_ui()
 
     def start(self):
         self.mainloop()
 
-    def _build_settings_ui(self):
+    def _build_ui(self):
         self.frame = tk.Frame(self)
         self.frame.pack(side='top', fill="both", expand="true", padx=(10, 10), pady=(10, 10))
         self.frame.grid_rowconfigure(0, weight=1)

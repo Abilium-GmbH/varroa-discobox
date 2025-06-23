@@ -24,7 +24,7 @@ from src.settings import Settings
 
 class UserInterface:
 
-    def __init__(self, cam: Camera = None):
+    def __init__(self, ctrl: DiscoboxController, cam: Camera = None):
         self.cam = cam
 
         self.window_width = 0
@@ -56,7 +56,8 @@ class UserInterface:
         self.settings = Settings(
             frame_count=100, fps=fps,
             led1_on=False, led2_on=False, vent_on=False)
-        self.ctrl = DiscoboxController()
+        
+        self.ctrl = ctrl
         self.ctrl.start()
         with self.ctrl as s:
             s.write(self.ctrl.set_led1(self.settings.led1))
@@ -465,11 +466,13 @@ def start_with_cam(cam_id):
     with get_camera(cam_id) as cam:
         _logger.info(f'Selected camera with ID {cam.get_id()}')
         setup_camera(cam)
-        ui = UserInterface(cam)
+        ctrl = DiscoboxController()
+        ui = UserInterface(ctrl, cam)
         ui.start()
 
 def start_without_cam():
-    ui = UserInterface()
+    ctrl = DiscoboxController(True)
+    ui = UserInterface(ctrl)
     ui.start()
 
 def main():
