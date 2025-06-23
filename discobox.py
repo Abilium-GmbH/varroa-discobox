@@ -133,7 +133,7 @@ class UserInterface:
                 handler=self,
                 buffer_count=10,
                 allocation_mode=AllocationMode.AnnounceFrame)
-            thread = threading.Thread(target=self.frame_processor)
+            thread = threading.Thread(target=self.frame_processor, daemon=True)
             thread.start()
         self.change_state(ui_states.IDLE)
 
@@ -196,7 +196,7 @@ class UserInterface:
         self.settings_view = SettingsView(self.root, self.cam, self.settings, self.ctrl)
 
     def analyze_testrun(self):
-        thread = ThreadWithCallback(target=process_images, args=(f'output/{self.loaded_test_run}',), callback=self.testrun_analyze_finished)
+        thread = ThreadWithCallback(target=process_images, args=(f'output/{self.loaded_test_run}',), callback=self.testrun_analyze_finished, daemon=True)
         self.view_controls_parent.grid_forget()
         self.analyze_progressbar_parent.grid(column=1, row=2, sticky='ew')
         self.analyze_progressbar.start()

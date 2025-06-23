@@ -43,7 +43,7 @@ class DiscoboxController():
         
         self.s = self.port.__enter__()
         self.port_open = True
-        self.thread = threading.Thread(target=self.read_port, args=(self.port,))
+        self.thread = threading.Thread(target=self.read_port, args=(self.port,), daemon=True)
         self.thread.start()
     
     def stop(self):
