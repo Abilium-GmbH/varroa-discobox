@@ -69,21 +69,23 @@ class SettingsView(tk.Toplevel):
         label = tk.Label(frame, text='LEDs & Fan', font=('Noto Sans', 12, 'bold'), anchor='w')
         label.pack(side='left', fill='y', expand='false', pady=(10, 5))
 
-        led_vent_settings = [
-            ('Led 1', 'On/Off', self.toggle_led_1, self.set_led_1, self.led1_value),
-            ('Led 2', 'On/Off', self.toggle_led_2, self.set_led_2, self.led2_value),
-            ('Fan', 'On/Off', self.toggle_vent, self.set_vent, self.vent_value),
-        ]
-
-        for setting in led_vent_settings:
-            frame = tk.Frame(self.frame)
-            frame.pack(side='top', fill='x', expand='false')
-            label = tk.Label(frame, text=setting[0], anchor='w', width=8)
-            label.pack(side='left', fill='x', expand='false')
-            button = tk.Button(frame, text=setting[1], command=setting[2])
-            button.pack(side='left', fill='x', expand='false')
-            scale = tk.Scale(frame, variable=setting[4], to=255, orient='horizontal', command=setting[3], length=250, sliderlength=20)
-            scale.pack(side='right', fill='x', expand='false')
+        self.led_1_button = self._create_led_vent_setting_ui(
+            'Led 1', 'On/Off', self.toggle_led_1, self.set_led_1, self.led1_value, self.led1_on)
+        self.led_2_button = self._create_led_vent_setting_ui(
+            'Led 2', 'On/Off', self.toggle_led_2, self.set_led_2, self.led2_value, self.led2_on)
+        self.vent_button = self._create_led_vent_setting_ui(
+            'Fan', 'On/Off', self.toggle_vent, self.set_vent, self.vent_value, self.vent_on)
+    
+    def _create_led_vent_setting_ui(self, *setting):
+        frame = tk.Frame(self.frame)
+        frame.pack(side='top', fill='x', expand='false')
+        label = tk.Label(frame, text=setting[0], anchor='w', width=8)
+        label.pack(side='left', fill='x', expand='false')
+        button = tk.Button(frame, text=setting[1], command=setting[2], bg=self._get_button_color(setting[5]))
+        button.pack(side='left', fill='x', expand='false')
+        scale = tk.Scale(frame, variable=setting[4], to=255, orient='horizontal', command=setting[3], length=250, sliderlength=20)
+        scale.pack(side='right', fill='x', expand='false')
+        return button
 
     def frame_count_value_change(self, value, index, mode):
         frame_count = self.frame_count_value.get()
@@ -103,6 +105,7 @@ class SettingsView(tk.Toplevel):
             self.led1_on = not self.led1_on
             s.write(self.ctrl.set_led1_on(self.led1_on))
         self.settings.led1_on = self.led1_on
+        self.led_1_button.configure(bg=self._get_button_color(self.led1_on))
     
     def set_led_1(self, value):
         with self.ctrl as s:
@@ -114,6 +117,7 @@ class SettingsView(tk.Toplevel):
             self.led2_on = not self.led2_on
             s.write(self.ctrl.set_led2_on(self.led2_on))
         self.settings.led2_on = self.led2_on
+        self.led_2_button.configure(bg=self._get_button_color(self.led2_on))
 
     def set_led_2(self, value):
         with self.ctrl as s:
@@ -125,9 +129,12 @@ class SettingsView(tk.Toplevel):
             self.vent_on = not self.vent_on
             s.write(self.ctrl.set_vent_on(self.vent_on))
         self.settings.vent_on = self.vent_on
+        self.vent_button.configure(bg=self._get_button_color(self.vent_on))
 
     def set_vent(self, value):
         with self.ctrl as s:
             s.write(self.ctrl.set_vent(int(value)))
         self.settings.vent = int(value)
     
+    def _get_button_color(self, on: bool):
+        return "#94db89" if on else "#dd9888"
