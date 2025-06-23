@@ -119,6 +119,7 @@ class UserInterface:
     def show_hide_cam(self):
         if self.cam.is_streaming():
             self.cam.stop_streaming()
+            self.clear_panel()
         else:
             self.cam.UserSetSelector.set('Default')
             set_feature(self.cam, 'ExposureAuto', 'Continuous')
@@ -333,8 +334,9 @@ class UserInterface:
                     img = img.resize(image_size)
                     img = ImageTk.PhotoImage(img)
 
-                    self.panel.configure(image=img)
-                    self.panel.image = img
+                    if self.cam.is_streaming():
+                        self.panel.configure(image=img)
+                        self.panel.image = img
 
                 self.cam.queue_frame(frame)
             except queue.Empty:
@@ -343,7 +345,7 @@ class UserInterface:
                 break
         
         try:
-            self.clear_panel()
+            self.show_image()
         except:
             pass
     
