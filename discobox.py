@@ -379,14 +379,17 @@ class UserInterface:
         self.test_run_label = tk.Label(self.controls_panel, text='', anchor='nw', justify='left', wraplength=200)
         self.test_run_label.grid(column=0, row=6, sticky='ew')
 
+        self.test_runs_label = tk.Label(self.controls_panel, text='Previous Test Runs', font=('Noto Sans', 12, 'bold'))
+        self.test_runs_label.grid(column=0, row=7, pady=(10, 0), sticky='nw')
+
         self.test_runs = tk.Variable(value=[])
         self.test_runs_list = tk.Listbox(self.controls_panel, listvariable=self.test_runs, selectmode='single')
-        self.test_runs_list.grid(column=0, row=7, pady=(10, 0), sticky='ew')
+        self.test_runs_list.grid(column=0, row=8, sticky='ew')
         self.test_runs_list.bind('<<ListboxSelect>>', self.on_select_test_run)
         self.update_test_runs_list()
 
         self.load_exit_test_run_button = tk.Button(self.controls_panel, text='Load Test Run', command=self.load_close_test_run, state=tk.DISABLED)
-        self.load_exit_test_run_button.grid(column=0, row=8, sticky='ew')
+        self.load_exit_test_run_button.grid(column=0, row=9, sticky='ew')
 
         self.view_controls_parent = tk.Frame(self.frame, padx=10, pady=10)
         self.view_controls_parent.grid(column=1, row=2, sticky='ew')
