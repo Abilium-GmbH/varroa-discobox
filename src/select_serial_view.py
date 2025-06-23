@@ -26,7 +26,7 @@ class SelectSerialView(tk.Tk):
         self.frame.grid_columnconfigure(0, weight=1)
 
         self.serials = tk.Variable(value=[])
-        self.serials.set(sorted([f'{port.manufacturer} [{port.device}]' for port in self.serial_ports]))
+        self.serials.set([f'{port.manufacturer} [{port.device}]' for port in self.serial_ports])
         self.serials_list = tk.Listbox(self.frame, listvariable=self.serials, selectmode='single', height=5, width=0)
         self.serials_list.pack(side='top', fill="x", expand="false", pady=10)
         if len(self.serial_ports) > 0:
@@ -40,6 +40,7 @@ class SelectSerialView(tk.Tk):
 
     def select_serial(self):
         selected = [self.serial_ports[i] for i in self.serials_list.curselection()]
+            
         if len(selected) == 1:
             self.destroy()
             self.select_callback(selected[0].device)

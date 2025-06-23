@@ -344,6 +344,9 @@ class UserInterface:
                 self.cam.queue_frame(frame)
             except queue.Empty:
                 continue
+            except ValueError as e:
+                _logger.error(e)
+                continue
             except RuntimeError:
                 break
         

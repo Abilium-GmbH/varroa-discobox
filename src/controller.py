@@ -37,8 +37,8 @@ class DiscoboxController():
         ports = serial.tools.list_ports.comports()
         ports = [
             port for port in ports
-            if port.manufacturer and (port.manufacturer.find('Arduino')
-                                      or port.manufacturer.find('arduino'))]
+            if port.manufacturer and (port.manufacturer.find('Arduino') >= 0
+                                      or port.manufacturer.find('arduino') >= 0)]
         
         if len(ports) == 0:
             return
