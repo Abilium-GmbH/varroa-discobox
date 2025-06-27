@@ -504,6 +504,9 @@ class UserInterface:
                 _logger.debug('test run paused')
                 self.test_run_unpause_event.wait()
                 test_run_start_time += (time.time() - pause_start_time)
+                cycle_time = test_run_start_time + (self.recording_timeout * (self.recording_count - 1))
+                stop_vent_time = cycle_time + self.vent_time
+                start_recording_time = cycle_time + self.vent_time + self.vent_timeout
                 _logger.debug('test run continue')
 
             with self.ctrl as s:
