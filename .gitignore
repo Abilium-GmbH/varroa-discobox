@@ -1,5 +1,6 @@
 venv
 output
 vimbax.config
+settings.txt
 
 **/__pycache__

@@ -1,8 +1,11 @@
 import numpy as np
-import sys
 import cv2
 import re
-from os import listdir, mkdir, path
+from os import listdir, makedirs, path
+import logging
+
+_logger = logging.getLogger(__name__)
+
 
 # create diff from first image of series to all consecuting
 def diffImg(images):
@@ -11,7 +14,16 @@ def diffImg(images):
         d = cv2.bitwise_or(cv2.absdiff(images[0],images[i]),d)
     return d
 
-def process_images(pathToProcess):
+
+def process_images(folder_path, folder=None):
+    if folder is None:
+        for file in listdir(folder_path):
+            if file == 'results' or not path.isdir(f'{folder_path}/{file}'):
+                continue
+            process_images(folder_path, file)
+        return
+
+    pathToProcess = f'{folder_path}/{folder}'
     filesToProcess = []
     for file in listdir(pathToProcess):
         if file.endswith(".bmp"):
@@ -21,7 +33,7 @@ def process_images(pathToProcess):
     # all images to process
     imagesBW = []
     originals = []
-    allive = 0
+    alive = 0
 
     # regexpattern to find *.bmp files
     pattern = re.compile('.*.bmp', re.IGNORECASE)
@@ -52,7 +64,7 @@ def process_images(pathToProcess):
     activity = cv2.bitwise_or(originals[0], originals[0], mask=cv2.bitwise_not(mask))
     background = np.full(originals[0].shape, (57,255,20), dtype=np.uint8)
     background = cv2.bitwise_or(background, background, mask=mask)
-    activity = cv2.bitwise_or(activity, background);
+    activity = cv2.bitwise_or(activity, background)
 
     #   increase the size of the spots
     kernel = np.ones((3,3),np.uint8)
@@ -89,19 +101,21 @@ def process_images(pathToProcess):
         #     for i in range(0,len(originals)):
         #         cv2.circle(originals[i], center, 20, (255, 0, 0), 3)
 
-    allive = str(len(contours))
-    print("Found " + allive + " varroa alive.")
+    alive = str(len(contours))
+    _logger.info("Found " + alive + " varroa alive.")
 
-    if not path.exists(pathToProcess + '/results/'):
-        mkdir(pathToProcess + '/results/')
-    for i in range(0, len(originals)):
-        cv2.imwrite(pathToProcess + '/results/marked_' + filesToProcess[i].replace('bmp', 'png'), originals[i])
-    cv2.imwrite(pathToProcess + '/results/activity.png', activity)
+    # makedirs(pathToProcess + '/results/', exist_ok=True)
+    # for i in range(0, len(originals)):
+    #     cv2.imwrite(pathToProcess + '/results/marked_' + filesToProcess[i].replace('bmp', 'png'), originals[i])
+    # cv2.imwrite(pathToProcess + '/results/activity.png', activity)
+
+    makedirs(folder_path + '/results/', exist_ok=True)
+    cv2.imwrite(f'{folder_path}/results/marked_{folder}_alive-{alive}.png', originals[-1])
 
 
-if __name__ == '__main__':
-    # The path where one sample (burst of images) is stored
-    pathToProcess = str(sys.argv[1])
+# if __name__ == '__main__':
+#     # The path where one sample (burst of images) is stored
+#     pathToProcess = str(sys.argv[1])
 
-    process_images(pathToProcess)
+#     process_images(pathToProcess)
 

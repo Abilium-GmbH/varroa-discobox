@@ -2,15 +2,16 @@ from PIL import Image, ImageTk
 from datetime import datetime
 from vmbpy import *
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import ui_states
 import logging
 import sys
 import os
 import queue
 import threading
+import time
 
-logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.INFO)
 
 _logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ from src.processing import process_images
 from src.thread_with_callback import ThreadWithCallback
 from src.controller import DiscoboxController
 from src.settings import Settings
+from src.start_test_run_view import StartTestRunView
 
 class UserInterface:
 
@@ -32,13 +34,26 @@ class UserInterface:
 
         self.is_test_run = None
         self.test_run_paused = False
+        self.recording = None
+        self.recording_count = 0
+        self.recording_count_total = 0
+        self.recording_timeout = 0
+        self.vent_time = 0
+        self.vent_timeout = 0
+        self.frame_count = 0
+        self.frame_count_total = 0
+
+        self.test_run_event = threading.Event()
+        self.test_run_unpause_event = threading.Event()
 
         self.loaded_test_run = None
         self.loaded_test_run_image = 0
+        self.loaded_recording = None
         self.show_result_images = False
 
         self.frame_queue = queue.Queue()
-        self.frame_count = 0
+        
+        self.resize_debounce = None
 
         self.state = ui_states.IDLE
 
@@ -47,22 +62,21 @@ class UserInterface:
         self.root.geometry('1440x960+100+100')
         self.root.resizable(width=True, height=True)
         self.root.bind('<Configure>', self.on_window_resize)
+        self.root.protocol("WM_DELETE_WINDOW", self.close_window)
 
         self._build_root_ui()
 
         self.change_state(ui_states.IDLE)
-        
-        fps = get_feature(self.cam, 'AcquisitionFrameRateAbs')
-        self.settings = Settings(
-            frame_count=100, fps=fps,
-            led1_on=False, led2_on=False, vent_on=False)
+
+        self.settings = Settings.from_file('settings.txt')
+        set_feature(self.cam, 'AcquisitionFrameRateAbs', self.settings.fps)
         
         self.ctrl = ctrl
         self.ctrl.start()
         with self.ctrl as s:
             s.write(self.ctrl.set_led1(self.settings.led1))
             s.write(self.ctrl.set_led2(self.settings.led2))
-            s.write(self.ctrl.set_vent(self.settings.vent))
+            s.write(self.ctrl.set_vent(255))
             s.write(self.ctrl.set_all_off())
 
     def start(self):
@@ -72,6 +86,13 @@ class UserInterface:
         with self.ctrl as s:
             s.write(self.ctrl.set_all_off())
         self.ctrl.stop()
+    
+    def close_window(self):
+        if self.is_test_run:
+            if not messagebox.askokcancel(
+                title="Test Run", message="There is currently a test run in progress. Are you sure you want to close the appliaction?"):
+                return
+        self.root.destroy()
 
     def change_state(self, state):
         self.state = state
@@ -85,37 +106,51 @@ class UserInterface:
                 self.start_stop_button.configure(text='Start Test Run', state=tk.DISABLED)
                 self.fps_label.grid_forget()
 
+            self.settings_button.configure(state=tk.NORMAL if self.cam else tk.DISABLED)
             self.pause_resume_button.configure(text='Pause Test Run', state=tk.DISABLED)
             self.test_runs_list.configure(state=tk.NORMAL)
             self.load_exit_test_run_button.configure(text='Load Test Run', state=tk.NORMAL if self.test_runs_list.curselection() else tk.DISABLED)
+            self.recordings_list.configure(state=tk.DISABLED)
+            self.load_exit_recording_button.configure(state=tk.DISABLED)
             self.view_controls_parent.grid_forget()
+            self.title.configure(text=f'{self.cam.get_model()} {self.cam.get_id()}' if self.cam else 'No camera selected')
 
         elif self.state == ui_states.TEST_RUN:
             self.show_hide_cam_button.configure(state=tk.DISABLED)
+            self.settings_button.configure(state=tk.DISABLED)
             self.start_stop_button.configure(text='Stop Test Run', state=tk.NORMAL)
             self.pause_resume_button.configure(text='Pause Test Run', state=tk.NORMAL)
             self.test_runs_list.configure(state=tk.DISABLED)
             self.load_exit_test_run_button.configure(text='Load Test Run', state=tk.DISABLED)
+            self.recordings_list.configure(state=tk.DISABLED)
+            self.load_exit_recording_button.configure(state=tk.DISABLED)
             self.view_controls_parent.grid_forget()
+            self.title.configure(text=f'{self.cam.get_model()} {self.cam.get_id()}' if self.cam else 'No camera selected')
 
         elif self.state == ui_states.TEST_RUN_PAUSED:
             self.show_hide_cam_button.configure(state=tk.DISABLED)
+            self.settings_button.configure(state=tk.DISABLED)
             self.start_stop_button.configure(text='Stop Test Run', state=tk.NORMAL)
             self.pause_resume_button.configure(text='Resume Test Run', state=tk.NORMAL)
             self.test_runs_list.configure(state=tk.DISABLED)
             self.load_exit_test_run_button.configure(text='Load Test Run', state=tk.DISABLED)
+            self.recordings_list.configure(state=tk.DISABLED)
+            self.load_exit_recording_button.configure(state=tk.DISABLED)
             self.view_controls_parent.grid_forget()
+            self.title.configure(text=f'{self.cam.get_model()} {self.cam.get_id()}' if self.cam else 'No camera selected')
 
         elif self.state == ui_states.VIEW:
             self.show_hide_cam_button.configure(state=tk.DISABLED)
+            self.settings_button.configure(state=tk.NORMAL)
             self.start_stop_button.configure(text='Start Test Run', state=tk.DISABLED)
             self.pause_resume_button.configure(text='Pause Test Run', state=tk.DISABLED)
             self.test_runs_list.configure(state=tk.DISABLED)
             self.load_exit_test_run_button.configure(text='Close Test Run', state=tk.NORMAL)
+            self.recordings_list.configure(state=tk.DISABLED)
+            self.load_exit_recording_button.configure(state=tk.DISABLED)
             self.view_controls_parent.grid(column=1, row=2, sticky='ew')
+            self.title.configure(text=f'Test Run: {self.loaded_test_run} - {self.loaded_recording if self.loaded_recording else "Results"}')
         
-        self.settings_button.configure(state=tk.NORMAL if self.cam else tk.DISABLED)
-        self.title.configure(text=f'Camera: {self.cam.get_model()} {self.cam.get_id()}' if self.cam else 'No camera selected')
 
     def show_hide_cam(self):
         if self.cam.is_streaming():
@@ -138,36 +173,86 @@ class UserInterface:
             thread.start()
         self.change_state(ui_states.IDLE)
 
-    def start_stop_test_run(self):
+    def start_stop_test_run(self, ask=True):
         if self.is_test_run is None:
-            self.is_test_run = datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + f'_fps-{self.settings.fps}'
-            self.test_run_paused = False
-            self.frame_count = 0
-            self.test_run_label.configure(text=f'Test Run:\n{self.is_test_run}')
-            os.makedirs(f'output/{self.is_test_run}', exist_ok=True)
-            self.change_state(ui_states.TEST_RUN)
-        else:
+            StartTestRunView(self.start_test_run).start()
+        elif (
+            not ask or
+            messagebox.askokcancel(
+                title='Stop Test Run',
+                message='Are you sure you want to stop the current test run?')
+        ):
             self.is_test_run = None
             self.test_run_paused = False
-            self.test_run_label.configure(text='')
+            self.test_run_frame.grid_forget()
             self.update_test_runs_list()
             self.change_state(ui_states.IDLE)
+            self.test_run_event.set()
+            self.test_run_unpause_event.set()
+            # self.test_run_thread.join()
+    
+    def start_test_run(self, name):
+        if not name:
+            return
+
+        self.is_test_run = name
+        self._update_test_run_label()
+        self.test_run_paused = False
+        self.recording = None
+        self.recording_count = 0
+        self.recording_count_total = self.settings.recording_count
+        self._update_recording_label()
+        self.recording_timeout = self.settings.recording_timeout * 60
+        self.vent_time = self.settings.vent_time
+        self.vent_timeout = self.settings.vent_timeout
+        self.frame_count = 0
+        self.frame_count_total = self.settings.frame_count
+        self._update_frame_label()
+        self._update_ventilation_label(False)
+
+        self.test_run_frame.grid(column=1, row=1, sticky='ne')
+        self.test_run_frame.lift(self.panel)
+        os.makedirs(f'output/{self.is_test_run}', exist_ok=True)
+        self.change_state(ui_states.TEST_RUN)
+
+        self.test_run_event.clear()
+        self.test_run_unpause_event.clear()
+        self.test_run_thread = threading.Thread(target=self.test_run, daemon=True)
+        self.test_run_thread.start()
 
     def pause_resume_test_run(self):
         if self.is_test_run is None:
             return
-        
-        self.test_run_paused = not self.test_run_paused
-        self.change_state(ui_states.TEST_RUN_PAUSED if self.test_run_paused else ui_states.TEST_RUN)
+        if self.test_run_paused:
+            self.test_run_unpause_event.set()
+            self.test_run_paused = False
+            self.change_state(ui_states.TEST_RUN)
+        else:
+            self.test_run_unpause_event.clear()
+            self.test_run_paused = True
+            self.change_state(ui_states.TEST_RUN_PAUSED)
+
+    # ----------------------------------------------------------------------- #
+    # Displaying Previous Test Runs                                           #
 
     def update_test_runs_list(self):
         os.makedirs(f'output', exist_ok=True)
         self.test_runs.set(sorted([dir.name for dir in os.scandir('output')], reverse=True))
     
+    def update_recordings_list(self):
+        if not self.loaded_test_run:
+            self.recordings.set([])
+            return
+        
+        recordings = [
+            file for file in os.listdir(f'output/{self.loaded_test_run}')
+            if file != 'results' and os.path.isdir(f'output/{self.loaded_test_run}/{file}')]
+        self.recordings.set(sorted(recordings, reverse=False))
+    
     def on_select_test_run(self, val):
         if self.test_runs_list['state'] == 'disabled':
             return
-        selected = [self.test_runs_list.get(i) for i in self.test_runs_list.curselection()]
+        selected = self._get_selected_from_list(self.test_runs_list)
         if len(selected) != 1 or self.state != ui_states.IDLE:
             self.load_exit_test_run_button.configure(state=tk.DISABLED)
         else:
@@ -179,19 +264,57 @@ class UserInterface:
                 self.cam.stop_streaming()
                 self.clear_panel()
 
-            selected = [self.test_runs_list.get(i) for i in self.test_runs_list.curselection()]
+            selected = self._get_selected_from_list(self.test_runs_list)
             if len(selected) != 1:
-                self.load_exit_test_run_button.configure(state=tk.DISABLED)
                 return
+
             self.loaded_test_run = selected[0]
-            self.change_state(ui_states.VIEW)
-            self.show_image()
+            self.loaded_recording = None
+            self.update_recordings_list()
+            if not self.show_result_images:
+                self.show_hide_results()
             self.update_has_results()
+            self.change_state(ui_states.VIEW)
+            self.recordings_list.configure(state=tk.NORMAL)
+            self.show_first_image()
         else:
             self.loaded_test_run = None
-            self.clear_panel()
-            self.change_state(ui_states.IDLE)
+            self.loaded_recording = None
+            self.update_recordings_list()
             self.update_has_results()
+            self.change_state(ui_states.IDLE)
+            self.recordings_list.configure(state=tk.DISABLED)
+            self.clear_panel()
+    
+    def on_select_recording(self, val):
+        if self.recordings_list['state'] == 'disabled':
+            return
+        selected = self._get_selected_from_list(self.recordings_list)
+        if len(selected) != 1 or self.state != ui_states.VIEW:
+            self.load_exit_recording_button.configure(state=tk.DISABLED)
+        else:
+            self.load_exit_recording_button.configure(state=tk.NORMAL)
+    
+    def load_close_recording(self):
+        if self.loaded_recording is None:
+            selected = self._get_selected_from_list(self.recordings_list)
+            if len(selected) != 1:
+                return
+            self.loaded_recording = selected[0]
+            if self.show_result_images:
+                self.show_hide_results()
+            self.show_first_image()
+            self.load_exit_recording_button.configure(text='Close Recording')
+        else:
+            self.loaded_recording = None
+            if not self.show_result_images:
+                self.show_hide_results()
+            self.show_first_image()
+            self.load_exit_recording_button.configure(text='Load Recording')
+        self.title.configure(text=f'Test Run: {self.loaded_test_run} - {self.loaded_recording if self.loaded_recording else "Results"}')
+    
+    def _get_selected_from_list(self, selection_list):
+        return [selection_list.get(i) for i in selection_list.curselection()]
     
     def show_settings_window(self):
         self.settings_view = SettingsView(self.root, self.cam, self.settings, self.ctrl)
@@ -202,6 +325,7 @@ class UserInterface:
         self.analyze_progressbar_parent.grid(column=1, row=2, sticky='ew')
         self.analyze_progressbar.start()
         self.load_exit_test_run_button.configure(state=tk.DISABLED)
+        self.load_exit_recording_button.configure(state=tk.DISABLED)
         thread.start()
 
     def testrun_analyze_finished(self):
@@ -209,33 +333,26 @@ class UserInterface:
         self.analyze_progressbar_parent.grid_forget()
         self.analyze_progressbar.stop()
         self.load_exit_test_run_button.configure(state=tk.NORMAL)
+        self.load_exit_recording_button.configure(state=tk.NORMAL)
         self.update_has_results()
 
     def show_hide_results(self):
         self.show_result_images = not self.show_result_images
-        self.show_hide_results_button.configure(text='Show testrun images' if self.show_result_images else 'Show results')
-        if self.show_result_images:
-            self.analyze_button.grid_forget()
-        else:
-            self.analyze_button.grid(column=1, row=0, padx=(0, 20))
+        self.update_has_results()
         self.show_first_image()
 
     def update_has_results(self):
-        if not self.loaded_test_run:
-            return
-
         path = f'output/{self.loaded_test_run}/results'
-        if not self.show_result_images and not os.path.exists(path):
-            self.show_hide_results_button.configure(state=tk.DISABLED)
+        if self.loaded_test_run and self.show_result_images and (not os.path.exists(path) or len(os.listdir(path)) == 0):
+            self.test_results_label.grid(column=1, row=1)
+            self.test_results_label.lift(self.panel)
         else:
-            self.show_hide_results_button.configure(state=tk.NORMAL)
+            self.test_results_label.grid_forget()
 
     def show_first_image(self):
         self.show_image(0)
     
     def show_prev_image(self):
-        if self.loaded_test_run_image == 0:
-            return
         self.show_image(self.loaded_test_run_image - 1)
 
     def show_next_image(self):
@@ -250,21 +367,28 @@ class UserInterface:
         except:
             pass
 
-    def show_image(self, index=0):
+    def show_image(self, index):
         if self.loaded_test_run is None:
             return
         
-        path = f'output/{self.loaded_test_run}/results' if self.show_result_images else f'output/{self.loaded_test_run}'
-        if self.show_result_images and not os.path.exists(path):
-            self.show_hide_results()
+        path = f'output/{self.loaded_test_run}/results' if self.show_result_images else f'output/{self.loaded_test_run}/{self.loaded_recording}'
+        images = (sorted([file for file in os.listdir(path) if file.endswith(('.bmp', '.jpg', '.png', '.jpeg'))])
+                  if os.path.isdir(path) else [])
+
+        frame_size = (
+            self.root.winfo_width() - self.controls_panel.winfo_width(),
+            self.root.winfo_height() - self.view_controls_parent.winfo_height() - self.camera_label.winfo_height())
+        
+        if len(images) == 0:
+            img = Image.new('RGB', frame_size, color='#ffffff')
+            img = ImageTk.PhotoImage(img)
+            self.panel.configure(image=img, text='Test')
             return
 
-        images = sorted([dir.name for dir in os.scandir(path) if dir.name.endswith(('.bmp', '.jpg', '.png', '.jpeg'))])
-
-        if index < -1 or index >= len(images) or len(images) == 0:
-            return
-        if index == -1:
-            index = len(images) - 1
+        while index < 0:
+            index = len(images) + index
+        while index >= len(images):
+            index = index - len(images)
         
         self.loaded_test_run_image = index
         img = Image.open(f'{path}/{images[index]}')
@@ -278,20 +402,14 @@ class UserInterface:
         self.next_image_button.configure(state=tk.DISABLED if self.loaded_test_run_image == len(images) - 1 else tk.NORMAL)
         self.last_image_button.configure(state=tk.DISABLED if self.loaded_test_run_image == len(images) - 1 else tk.NORMAL)
 
-        frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.view_controls_parent.winfo_height() - self.title.winfo_height())
-        image_size = (0, 0)
-        ratio = img.width / img.height
-
-        if frame_size[0] / ratio > frame_size[1]:
-            image_size = (int(frame_size[1] * ratio), frame_size[1])
-        else:
-            image_size = (frame_size[0], int(frame_size[0] / ratio))
-
+        image_size = self._compute_image_size(frame_size, img.width, img.height)
         img = img.resize(image_size)
         img = ImageTk.PhotoImage(img)
 
         self.panel.configure(image=img)
         self.panel.image = img
+
+    # ----------------------------------------------------------------------- #
     
     def clear_panel(self):
         self.panel.configure(image=None)
@@ -299,9 +417,15 @@ class UserInterface:
 
     def on_window_resize(self, event):
         if (event.widget == self.root and (event.width != self.window_width or event.height != self.window_height)) or event.widget == self.view_controls_parent:
-            self.window_width = event.width
-            self.window_height = event.height
-            self.show_image(self.loaded_test_run_image)
+            if self.resize_debounce is not None:
+                self.resize_debounce.cancel()
+            self.resize_debounce = threading.Timer(0.2, self.resize, (event,))
+            self.resize_debounce.start()
+    
+    def resize(self, event):
+        self.window_width = event.width
+        self.window_height = event.height
+        self.show_image(self.loaded_test_run_image)
 
     def __call__(self, cam: Camera, stream: Stream, frame: Frame):
         self.stream = stream
@@ -313,27 +437,20 @@ class UserInterface:
                 frame = self.frame_queue.get(timeout=0.1)
 
                 if frame.get_status() == FrameStatus.Complete:
-                    frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.title.winfo_height())
-                    image_size = (0, 0)
-                    ratio = frame.get_width() / frame.get_height()
-
-                    if frame_size[0] / ratio > frame_size[1]:
-                        image_size = (int(frame_size[1] * ratio), frame_size[1])
-                    else:
-                        image_size = (frame_size[0], int(frame_size[0] / ratio))
 
                     img = Image.fromarray(frame.as_numpy_ndarray()[:, :, 0], mode='L')
                     fps = round(self.stream.get_feature_by_name("FrameRate").get(), 1)
+                    self.fps_label.configure(text=f'FPS: {fps}')
                     
-                    if self.is_test_run is not None and not self.test_run_paused:
+                    if self.is_test_run is not None and self.recording is not None:
                         self.frame_count += 1
-                        self.fps_label.configure(text=f'FPS {fps}    Frame {self.frame_count}/{self.settings.frame_count}')
-                        img.save(f'output/{self.is_test_run}/{self.is_test_run}_{frame.get_id():06}.bmp')
-                        if self.frame_count >= self.settings.frame_count:
-                            self.start_stop_test_run()
-                    else:
-                        self.fps_label.configure(text=f'FPS: {fps}')
+                        self._update_frame_label()
+                        img.save(f'output/{self.is_test_run}/{self.recording}/{self.recording}_{frame.get_id():06}.bmp')
+                        if self.frame_count >= self.frame_count_total:
+                            self._stop_recording()
 
+                    frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.camera_label.winfo_height())
+                    image_size = self._compute_image_size(frame_size, frame.get_width(), frame.get_height())
                     img = img.resize(image_size)
                     img = ImageTk.PhotoImage(img)
 
@@ -351,18 +468,111 @@ class UserInterface:
                 break
         
         try:
-            self.show_image()
+            self.show_first_image()
         except:
             pass
     
+    def _compute_image_size(self, frame_size, width, height):
+        ratio = width / height
+        if frame_size[0] / ratio > frame_size[1]:
+            return (int(frame_size[1] * ratio), frame_size[1])
+        else:
+            return (frame_size[0], int(frame_size[0] / ratio))
+    
+    # ----------------------------------------------------------------------- #
+    # Test Run Thread                                                         #
+
+    def test_run(self):
+        test_run_start_time = time.time() + 0.5
+
+        while (self.recording_count < self.recording_count_total
+               and not self.test_run_event.is_set()):
+
+            cycle_time = test_run_start_time + (self.recording_timeout * self.recording_count)
+            stop_vent_time = cycle_time + self.vent_time
+            start_recording_time = cycle_time + self.vent_time + self.vent_timeout
+
+            self._wait_until(cycle_time)
+            self.recording_count += 1
+            self._update_recording_label()
+            self.frame_count = 0
+            self._update_frame_label()
+
+            # Paused
+            if self.test_run_paused:
+                pause_start_time = time.time()
+                _logger.debug('test run paused')
+                self.test_run_unpause_event.wait()
+                test_run_start_time += (time.time() - pause_start_time)
+                _logger.debug('test run continue')
+
+            with self.ctrl as s:
+                # Start Ventilation
+                s.write(self.ctrl.set_vent_on(True))
+                self._update_ventilation_label(True)
+                _logger.debug('start ventilation')
+
+                self._wait_until(stop_vent_time)
+
+                # Stop Ventilation
+                s.write(self.ctrl.set_vent_on(False))
+                self._update_ventilation_label(False)
+                _logger.debug('stop ventilation')
+            
+            self._wait_until(start_recording_time)
+
+            # Start Recording
+            recording_name = f'{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}_fps-{self.settings.fps}'
+            recording_path = f'output/{self.is_test_run}/{recording_name}'
+            os.makedirs(recording_path, exist_ok=True)
+            self.recording = recording_name
+            _logger.debug('start recording')
+        
+        _logger.debug('test run finished')
+
+    def _update_test_run_label(self):
+        self.test_run_label.configure(text=f'Test Run: {self.is_test_run}')
+    
+    def _update_recording_label(self):
+        self.recording_label.configure(text=f'Recording: {self.recording_count}/{self.recording_count_total}')
+    
+    def _update_ventilation_label(self, vent: bool):
+        self.ventilation_label.configure(text=f'Ventilation: {"ON" if vent else "OFF"}')
+    
+    def _update_frame_label(self):
+        self.frame_label.configure(text=f'Frame: {self.frame_count}/{self.frame_count_total}')
+
+    def _wait_until(self, target_time):
+        now = time.time()
+        if now < target_time:
+            self.test_run_event.wait(target_time - now)
+    
+    def _stop_recording(self):
+        _logger.debug('stop recording')
+        recording_name = self.recording
+        self.recording = None
+        self._analyze_recording(f'output/{self.is_test_run}', recording_name)
+        if self.recording_count >= self.recording_count_total:
+            self.start_stop_test_run(False)
+
+    def _analyze_recording(self, test_run_path, recording_name):
+        _logger.debug('analyze recording')
+        thread = threading.Thread(target=process_images, args=(test_run_path, recording_name,))
+        thread.start()
+
+    # ----------------------------------------------------------------------- #
+    
+
     def _build_root_ui(self):
         self.frame = tk.Frame(self.root)
         self.frame.grid()
 
-        self.title = tk.Label(self.frame, text='No camera selected', font=('Noto Sans', 12, 'bold'), padx=10, pady=5)
-        self.title.grid(column=0, columnspan=2, row=0, sticky='nw')
+        self.camera_label = tk.Label(self.frame, text='Camera', font=('Noto Sans', 12, 'bold'), padx=10, pady=5)
+        self.camera_label.grid(column=0, row=0, sticky='nw')
+        self.title = tk.Label(self.frame, text='No camera selected', font=('Noto Sans', 12), padx=10, pady=5)
+        self.title.grid(column=1, row=0, sticky='nw')
         self.fps_label = tk.Label(self.frame, text='FPS: 0.0', font=('Noto Sans', 12), padx=10, pady=5)
-        self.fps_label.grid(column=0, columnspan=2, row=0, sticky='ne')
+        self.fps_label.grid(column=1, row=0, sticky='ne')
 
         self.panel = tk.Label(self.frame)
         self.panel.grid(column=1, row=1)
@@ -382,11 +592,8 @@ class UserInterface:
         self.pause_resume_button = tk.Button(self.controls_panel, text='Pause', command=self.pause_resume_test_run, state=tk.DISABLED)
         self.pause_resume_button.grid(column=0, row=5, sticky='ew')
 
-        self.test_run_label = tk.Label(self.controls_panel, text='', anchor='nw', justify='left', wraplength=200)
-        self.test_run_label.grid(column=0, row=6, sticky='ew')
-
         self.test_runs_label = tk.Label(self.controls_panel, text='Previous Test Runs', font=('Noto Sans', 12, 'bold'))
-        self.test_runs_label.grid(column=0, row=7, pady=(10, 0), sticky='nw')
+        self.test_runs_label.grid(column=0, row=7, pady=(20, 0), sticky='nw')
 
         self.test_runs = tk.Variable(value=[])
         self.test_runs_list = tk.Listbox(self.controls_panel, listvariable=self.test_runs, selectmode='single')
@@ -396,6 +603,15 @@ class UserInterface:
 
         self.load_exit_test_run_button = tk.Button(self.controls_panel, text='Load Test Run', command=self.load_close_test_run, state=tk.DISABLED)
         self.load_exit_test_run_button.grid(column=0, row=9, sticky='ew')
+
+        self.recordings = tk.Variable(value=[])
+        self.recordings_list = tk.Listbox(self.controls_panel, listvariable=self.recordings, selectmode='single')
+        self.recordings_list.grid(column=0, row=10, sticky='ew', pady=(5, 0))
+        self.recordings_list.bind('<<ListboxSelect>>', self.on_select_recording)
+        self.update_recordings_list()
+
+        self.load_exit_recording_button = tk.Button(self.controls_panel, text='Load Recording', command=self.load_close_recording, state=tk.DISABLED)
+        self.load_exit_recording_button.grid(column=0, row=11, sticky='ew')
 
         self.view_controls_parent = tk.Frame(self.frame, padx=10, pady=10)
         self.view_controls_parent.grid(column=1, row=2, sticky='ew')
@@ -418,8 +634,17 @@ class UserInterface:
         self.view_controls.grid_rowconfigure(0, weight=1)
         self.view_controls.grid_columnconfigure(2, weight=1)
 
-        self.show_hide_results_button = tk.Button(self.view_controls, text='Show results', command=self.show_hide_results)
-        self.show_hide_results_button.grid(column=0, row=0, padx=(0, 5))
+        self.test_results_label = tk.Label(self.frame, text='No Test Results', anchor='center')
+        self.test_run_frame = tk.Frame(self.frame, padx=2, pady=2)
+
+        self.test_run_label = tk.Label(self.test_run_frame, text='Test', anchor='ne', justify='right')
+        self.test_run_label.grid(column=0, row=0, sticky='ne')
+        self.recording_label = tk.Label(self.test_run_frame, text='TestREcodring', anchor='ne', justify='right')
+        self.recording_label.grid(column=0, row=1, sticky='ne')
+        self.ventilation_label = tk.Label(self.test_run_frame, text='Vent', anchor='ne', justify='right')
+        self.ventilation_label.grid(column=0, row=2, sticky='ne')
+        self.frame_label = tk.Label(self.test_run_frame, text='Frame:', anchor='ne', justify='right')
+        self.frame_label.grid(column=0, row=3, sticky='ne')
 
         self.analyze_button = tk.Button(self.view_controls, text='Analyze Testrun', command=self.analyze_testrun)
         self.analyze_button.grid(column=1, row=0, padx=(0, 20))
@@ -443,8 +668,6 @@ class UserInterface:
         self.next_image_button.grid(column=8, row=0)
         self.last_image_button = tk.Button(self.view_controls, text='>>>', command=self.show_last_image, border=0)
         self.last_image_button.grid(column=9, row=0)
-
-        # self.root.bind('<Escape>', lambda e: self.root.quit())
 
 
 def print_help():
