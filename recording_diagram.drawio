@@ -1,0 +1,74 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:139.0) Gecko/20100101 Firefox/139.0" version="27.1.6">
+  <diagram name="Page-1" id="dbsR8vs_CazV-WnHm-wN">
+    <mxGraphModel dx="1091" dy="623" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="CG9kelQKlH86swnD9Ld2-2" value="Ventilation duration [s]" style="endArrow=baseDash;html=1;rounded=0;startArrow=baseDash;startFill=0;endFill=0;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;labelBackgroundColor=none;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="40" y="720" as="sourcePoint" />
+            <mxPoint x="560" y="720" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-3" value="LED 1 duration [s]" style="endArrow=baseDash;html=1;rounded=0;startArrow=baseDash;startFill=0;endFill=0;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;labelBackgroundColor=none;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="180" y="740" as="sourcePoint" />
+            <mxPoint x="560" y="740" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-4" value="&lt;div&gt;LED 2 duration [s]&lt;/div&gt;" style="endArrow=baseDash;html=1;rounded=0;startArrow=baseDash;startFill=0;endFill=0;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;labelBackgroundColor=none;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="80" y="760" as="sourcePoint" />
+            <mxPoint x="560" y="760" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-6" value="Number of Frames / FPS = Recording time [s]" style="endArrow=baseDash;html=1;rounded=0;startArrow=baseDash;startFill=0;endFill=0;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;labelBackgroundColor=none;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="310" y="780" as="sourcePoint" />
+            <mxPoint x="560" y="780" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-8" value="" style="endArrow=none;dashed=1;html=1;rounded=0;opacity=50;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="40" y="810" as="sourcePoint" />
+            <mxPoint x="40" y="710" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-10" value="" style="endArrow=none;dashed=1;html=1;rounded=0;opacity=50;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="560" y="790" as="sourcePoint" />
+            <mxPoint x="560" y="710" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-11" value="" style="endArrow=block;html=1;rounded=0;endFill=1;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="800" y="800" as="sourcePoint" />
+            <mxPoint x="830" y="800" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-12" value="0" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="10" y="810" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-13" value="t" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="790" y="800" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-14" value="Time between Recording [min]" style="endArrow=baseDash;html=1;rounded=0;startArrow=baseDash;startFill=0;endFill=0;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;labelBackgroundColor=none;" edge="1" parent="1">
+          <mxGeometry x="0.6307" width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="40" y="800" as="sourcePoint" />
+            <mxPoint x="800" y="800" as="targetPoint" />
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-16" value="" style="endArrow=none;html=1;rounded=0;jumpSize=15;jumpStyle=none;dashed=1;strokeWidth=1;opacity=50;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="800" y="810" as="sourcePoint" />
+            <mxPoint x="800" y="710" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="CG9kelQKlH86swnD9Ld2-17" value="1 Recording cycle" style="shape=curlyBracket;whiteSpace=wrap;html=1;rounded=1;flipH=1;labelPosition=right;verticalLabelPosition=middle;align=left;verticalAlign=middle;rotation=-90;textDirection=vertical-lr;" vertex="1" parent="1">
+          <mxGeometry x="410" y="310" width="20" height="760" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

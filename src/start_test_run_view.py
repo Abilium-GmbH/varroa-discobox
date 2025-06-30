@@ -18,10 +18,12 @@ class StartTestRunView(tk.Toplevel):
         self.start_test_run = start_test_run
 
         val = f'test_run_{date.today().strftime("%Y-%m-%d")}'
-        self.name_value = tk.StringVar(master=self, value=val)
+        self.name_value = tk.StringVar(master=self)
         self.name_value.trace_add('write', self.name_value_change)
 
         self._build_ui()
+
+        self.name_value.set(val)
 
     def start(self):
         self.mainloop()

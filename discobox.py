@@ -11,7 +11,7 @@ import queue
 import threading
 import time
 
-logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.INFO)
 
 _logger = logging.getLogger(__name__)
 
@@ -36,12 +36,7 @@ class UserInterface:
         self.test_run_paused = False
         self.recording = None
         self.recording_count = 0
-        self.recording_count_total = 0
-        self.recording_timeout = 0
-        self.vent_time = 0
-        self.vent_timeout = 0
         self.frame_count = 0
-        self.frame_count_total = 0
 
         self.test_run_event = threading.Event()
         self.test_run_unpause_event = threading.Event()
@@ -69,14 +64,14 @@ class UserInterface:
         self.change_state(ui_states.IDLE)
 
         self.settings = Settings.from_file('settings.txt')
+        self.s_copy = Settings.copy(self.settings)
         set_feature(self.cam, 'AcquisitionFrameRateAbs', self.settings.fps)
+
+        self.settings_view = None
         
         self.ctrl = ctrl
         self.ctrl.start()
         with self.ctrl as s:
-            s.write(self.ctrl.set_led1(self.settings.led1))
-            s.write(self.ctrl.set_led2(self.settings.led2))
-            s.write(self.ctrl.set_vent(255))
             s.write(self.ctrl.set_all_off())
 
     def start(self):
@@ -200,15 +195,19 @@ class UserInterface:
         self.test_run_paused = False
         self.recording = None
         self.recording_count = 0
-        self.recording_count_total = self.settings.recording_count
         self._update_recording_label()
-        self.recording_timeout = self.settings.recording_timeout * 60
-        self.vent_time = self.settings.vent_time
-        self.vent_timeout = self.settings.vent_timeout
         self.frame_count = 0
-        self.frame_count_total = self.settings.frame_count
         self._update_frame_label()
         self._update_ventilation_label(False)
+        self._update_led1_label(False)
+        self._update_led2_label(False)
+
+        with self.ctrl as s:
+            s.write(self.ctrl.set_all_off())
+
+        self.close_settings_window()
+        self.s_copy = Settings.copy(self.settings)
+        self.s_copy.recording_timeout *= 60
 
         self.test_run_frame.grid(column=1, row=1, sticky='ne')
         self.test_run_frame.lift(self.panel)
@@ -317,7 +316,12 @@ class UserInterface:
         return [selection_list.get(i) for i in selection_list.curselection()]
     
     def show_settings_window(self):
+        self.close_settings_window()
         self.settings_view = SettingsView(self.root, self.cam, self.settings, self.ctrl)
+
+    def close_settings_window(self):
+        if self.settings_view is not None:
+            self.settings_view.destroy()
 
     def analyze_testrun(self):
         thread = ThreadWithCallback(target=process_images, args=(f'output/{self.loaded_test_run}',), callback=self.testrun_analyze_finished, daemon=True)
@@ -446,7 +450,7 @@ class UserInterface:
                         self.frame_count += 1
                         self._update_frame_label()
                         img.save(f'output/{self.is_test_run}/{self.recording}/{self.recording}_{frame.get_id():06}.bmp')
-                        if self.frame_count >= self.frame_count_total:
+                        if self.frame_count >= self.s_copy.frame_count:
                             self._stop_recording()
 
                     frame_size = (self.root.winfo_width() - self.controls_panel.winfo_width(), self.root.winfo_height() - self.camera_label.winfo_height())
@@ -483,14 +487,73 @@ class UserInterface:
     # Test Run Thread                                                         #
 
     def test_run(self):
+        def _start_recording():
+            recording_name = f'{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}_fps-{self.s_copy.fps}'
+            recording_path = f'output/{self.is_test_run}/{recording_name}'
+            os.makedirs(recording_path, exist_ok=True)
+            self.recording = recording_name
+            _logger.debug('start recording')
+
+        def _start_vent():
+            with self.ctrl as s:
+                s.write(self.ctrl.set_vent_on(True))
+                s.write(self.ctrl.set_vent(self.s_copy.vent))
+                self._update_ventilation_label(True)
+                _logger.debug('start ventilation')
+
+        def _start_led1():
+            with self.ctrl as s:
+                s.write(self.ctrl.set_led1_on(True))
+                s.write(self.ctrl.set_led1(self.s_copy.led1))
+                self._update_led1_label(True)
+                _logger.debug('start led 1')
+        
+        def _start_led2():
+            with self.ctrl as s:
+                s.write(self.ctrl.set_led2_on(True))
+                s.write(self.ctrl.set_led2(self.s_copy.led2))
+                self._update_led2_label(True)
+                _logger.debug('start led 2')
+
+        def _stop_all():
+            with self.ctrl as s:
+                s.write(self.ctrl.set_vent_on(False))
+                self._update_ventilation_label(False)
+                _logger.debug('stop ventilation')
+
+                s.write(self.ctrl.set_led1_on(False))
+                self._update_led1_label(False)
+                _logger.debug('stop led 1')
+
+                s.write(self.ctrl.set_led2_on(False))
+                self._update_led2_label(False)
+                _logger.debug('stop led 2')
+
+        self._update_frame_label
+
         test_run_start_time = time.time() + 0.5
 
-        while (self.recording_count < self.recording_count_total
+        while (self.recording_count < self.s_copy.recording_count
                and not self.test_run_event.is_set()):
 
-            cycle_time = test_run_start_time + (self.recording_timeout * self.recording_count)
-            stop_vent_time = cycle_time + self.vent_time
-            start_recording_time = cycle_time + self.vent_time + self.vent_timeout
+            cycle_time = test_run_start_time + (self.s_copy.recording_timeout * self.recording_count)
+            recording_time = self.s_copy.frame_count / float(self.s_copy.fps)
+            
+            longest = max(self.s_copy.vent_time, self.s_copy.led1_time, self.s_copy.led2_time, recording_time)
+
+            start_recording_time = cycle_time + longest - recording_time
+            stop_recording_time = cycle_time + longest
+            start_vent_time = cycle_time + longest - self.s_copy.vent_time
+            start_led1_time = cycle_time + longest - self.s_copy.led1_time
+            start_led2_time = cycle_time + longest - self.s_copy.led2_time
+
+            actions: list = sorted({
+                start_recording_time: _start_recording,
+                start_vent_time: _start_vent,
+                start_led1_time: _start_led1,
+                start_led2_time: _start_led2,
+            }.items(), key=lambda item: item[0])
+
 
             self._wait_until(cycle_time)
             self.recording_count += 1
@@ -499,51 +562,42 @@ class UserInterface:
             self._update_frame_label()
 
             # Paused
-            if self.test_run_paused:
-                pause_start_time = time.time()
-                _logger.debug('test run paused')
-                self.test_run_unpause_event.wait()
-                test_run_start_time += (time.time() - pause_start_time)
-                cycle_time = test_run_start_time + (self.recording_timeout * (self.recording_count - 1))
-                stop_vent_time = cycle_time + self.vent_time
-                start_recording_time = cycle_time + self.vent_time + self.vent_timeout
-                _logger.debug('test run continue')
+            # if self.test_run_paused:
+            #     pause_start_time = time.time()
+            #     _logger.debug('test run paused')
+            #     self.test_run_unpause_event.wait()
+            #     test_run_start_time += (time.time() - pause_start_time)
+            #     cycle_time = test_run_start_time + (self.recording_timeout * (self.recording_count - 1))
+            #     stop_vent_time = cycle_time + self.vent_time
+            #     start_recording_time = cycle_time + self.vent_time + self.vent_timeout
+            #     _logger.debug('test run continue')
 
-            with self.ctrl as s:
-                # Start Ventilation
-                s.write(self.ctrl.set_vent_on(True))
-                self._update_ventilation_label(True)
-                _logger.debug('start ventilation')
-
-                self._wait_until(stop_vent_time)
-
-                # Stop Ventilation
-                s.write(self.ctrl.set_vent_on(False))
-                self._update_ventilation_label(False)
-                _logger.debug('stop ventilation')
+            for wait_until, action in actions:
+                self._wait_until(wait_until)
+                action()
             
-            self._wait_until(start_recording_time)
-
-            # Start Recording
-            recording_name = f'{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}_fps-{self.settings.fps}'
-            recording_path = f'output/{self.is_test_run}/{recording_name}'
-            os.makedirs(recording_path, exist_ok=True)
-            self.recording = recording_name
-            _logger.debug('start recording')
+            self._wait_until(stop_recording_time + 1)
+            _stop_all()
         
         _logger.debug('test run finished')
 
     def _update_test_run_label(self):
-        self.test_run_label.configure(text=f'Test Run: {self.is_test_run}')
+        self.test_run_label.configure(text=f'{self.is_test_run}')
     
     def _update_recording_label(self):
-        self.recording_label.configure(text=f'Recording: {self.recording_count}/{self.recording_count_total}')
+        self.recording_label.configure(text=f'Recording: {self.recording_count}/{self.s_copy.recording_count}')
     
     def _update_ventilation_label(self, vent: bool):
         self.ventilation_label.configure(text=f'Ventilation: {"ON" if vent else "OFF"}')
     
+    def _update_led1_label(self, led1: bool):
+        self.led1_label.configure(text=f'LED 1: {"ON" if led1 else "OFF"}')
+    
+    def _update_led2_label(self, led2: bool):
+        self.led2_label.configure(text=f'LED 2: {"ON" if led2 else "OFF"}')
+    
     def _update_frame_label(self):
-        self.frame_label.configure(text=f'Frame: {self.frame_count}/{self.frame_count_total}')
+        self.frame_label.configure(text=f'Frame: {self.frame_count}/{self.s_copy.frame_count}')
 
     def _wait_until(self, target_time):
         now = time.time()
@@ -555,7 +609,7 @@ class UserInterface:
         recording_name = self.recording
         self.recording = None
         self._analyze_recording(f'output/{self.is_test_run}', recording_name)
-        if self.recording_count >= self.recording_count_total:
+        if self.recording_count >= self.s_copy.recording_count:
             self.start_stop_test_run(False)
 
     def _analyze_recording(self, test_run_path, recording_name):
@@ -640,14 +694,18 @@ class UserInterface:
         self.test_results_label = tk.Label(self.frame, text='No Test Results', anchor='center')
         self.test_run_frame = tk.Frame(self.frame, padx=2, pady=2)
 
-        self.test_run_label = tk.Label(self.test_run_frame, text='Test', anchor='ne', justify='right')
+        self.test_run_label = tk.Label(self.test_run_frame, text='', anchor='ne', justify='right')
         self.test_run_label.grid(column=0, row=0, sticky='ne')
-        self.recording_label = tk.Label(self.test_run_frame, text='TestREcodring', anchor='ne', justify='right')
+        self.recording_label = tk.Label(self.test_run_frame, text='', anchor='ne', justify='right')
         self.recording_label.grid(column=0, row=1, sticky='ne')
-        self.ventilation_label = tk.Label(self.test_run_frame, text='Vent', anchor='ne', justify='right')
+        self.ventilation_label = tk.Label(self.test_run_frame, text='', anchor='ne', justify='right')
         self.ventilation_label.grid(column=0, row=2, sticky='ne')
-        self.frame_label = tk.Label(self.test_run_frame, text='Frame:', anchor='ne', justify='right')
-        self.frame_label.grid(column=0, row=3, sticky='ne')
+        self.led1_label = tk.Label(self.test_run_frame, text='', anchor='ne', justify='right')
+        self.led1_label.grid(column=0, row=3, sticky='ne')
+        self.led2_label = tk.Label(self.test_run_frame, text='', anchor='ne', justify='right')
+        self.led2_label.grid(column=0, row=4, sticky='ne')
+        self.frame_label = tk.Label(self.test_run_frame, text='', anchor='ne', justify='right')
+        self.frame_label.grid(column=0, row=5, sticky='ne')
 
         self.analyze_button = tk.Button(self.view_controls, text='Analyze Testrun', command=self.analyze_testrun)
         self.analyze_button.grid(column=1, row=0, padx=(0, 20))

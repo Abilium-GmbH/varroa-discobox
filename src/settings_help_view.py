@@ -28,19 +28,24 @@ class SettingsHelpView(tk.Toplevel):
         frame = tk.Frame(self.frame)
         frame.pack(side='top', fill='x', expand='false')
         label = tk.Label(
-            frame, wraplength=720, justify='left',
+            frame, wraplength=920, justify='left',
             text='A test run consists of one or more recording cycles.'
                  'The following diagram shows a timeline of one recording '
-                 'cycle with all the avalaible settings.')
-        label.pack(side='left', fill='none', expand='false', pady=(0, 5))
+                 'cycle with all the avalaible settings.\n'
+                 'The fan, led 1, and led 2 will be turned on such that they '
+                 'run for their configured duration and end at the same '
+                 'time as the recording '
+                 '(to ensure all frames are captured with the same light, '
+                 'they stay on for an additional second).')
+        label.pack(side='left', fill='none', expand='false', pady=(0, 10))
 
         self.panel = tk.Label(self.frame)
         self.panel.pack(side='top', fill='both', expand='true')
         
-        img = Image.open('recording.png')
+        img = Image.open('recording_diagram.png')
 
         ratio = float(img.width) / img.height
-        image_size = (720, int(720.0 / ratio))
+        image_size = (920, int(920.0 / ratio))
         img = img.resize(image_size)
         img = ImageTk.PhotoImage(img)
 
