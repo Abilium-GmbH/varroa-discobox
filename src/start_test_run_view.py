@@ -38,7 +38,7 @@ class StartTestRunView(tk.Toplevel):
         frame.pack(side='top', fill='x', expand='false')
         label = tk.Label(frame, text='Test Run Name', anchor='w', width=20)
         label.pack(side='left', fill='both', expand='false')
-        self.name_input = tk.Entry(frame, textvariable=self.name_value)
+        self.name_input = tk.Entry(frame, textvariable=self.name_value, width=40)
         self.name_input.pack(side='left', fill='both', expand='true')
         self.name_input.focus()
 

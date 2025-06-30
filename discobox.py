@@ -538,6 +538,21 @@ class UserInterface:
 
             cycle_time = test_run_start_time + (self.s_copy.recording_timeout * self.recording_count)
             recording_time = self.s_copy.frame_count / float(self.s_copy.fps)
+
+            self._wait_until(cycle_time)
+            self.recording_count += 1
+            self._update_recording_label()
+            self.frame_count = 0
+            self._update_frame_label()
+
+            # Paused
+            if self.test_run_paused:
+                pause_start_time = time.time()
+                _logger.debug('test run paused')
+                self.test_run_unpause_event.wait()
+                test_run_start_time += (time.time() - pause_start_time)
+                cycle_time = test_run_start_time + (self.s_copy.recording_timeout * (self.recording_count - 1))
+                _logger.debug('test run continue')
             
             longest = max(self.s_copy.vent_time, self.s_copy.led1_time, self.s_copy.led2_time, recording_time)
 
@@ -553,24 +568,6 @@ class UserInterface:
                 start_led1_time: _start_led1,
                 start_led2_time: _start_led2,
             }.items(), key=lambda item: item[0])
-
-
-            self._wait_until(cycle_time)
-            self.recording_count += 1
-            self._update_recording_label()
-            self.frame_count = 0
-            self._update_frame_label()
-
-            # Paused
-            # if self.test_run_paused:
-            #     pause_start_time = time.time()
-            #     _logger.debug('test run paused')
-            #     self.test_run_unpause_event.wait()
-            #     test_run_start_time += (time.time() - pause_start_time)
-            #     cycle_time = test_run_start_time + (self.recording_timeout * (self.recording_count - 1))
-            #     stop_vent_time = cycle_time + self.vent_time
-            #     start_recording_time = cycle_time + self.vent_time + self.vent_timeout
-            #     _logger.debug('test run continue')
 
             for wait_until, action in actions:
                 self._wait_until(wait_until)
