@@ -1,5 +1,5 @@
 #!/bin/bash
 
+git stash -u
 git checkout master
-git stash
 git pull
