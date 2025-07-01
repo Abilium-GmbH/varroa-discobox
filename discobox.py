@@ -1,5 +1,5 @@
 from PIL import Image, ImageTk
-from datetime import datetime
+from datetime import datetime, timedelta
 from vmbpy import *
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -11,7 +11,7 @@ import queue
 import threading
 import time
 
-logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s: %(name)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO)
 
 _logger = logging.getLogger(__name__)
 
@@ -65,6 +65,7 @@ class UserInterface:
 
         self.settings = Settings.from_file('settings.txt')
         self.s_copy = Settings.copy(self.settings)
+        self.s_copy.recording_timeout *= 60
         set_feature(self.cam, 'AcquisitionFrameRateAbs', self.settings.fps)
 
         self.settings_view = None
@@ -201,6 +202,7 @@ class UserInterface:
         self._update_ventilation_label(False)
         self._update_led1_label(False)
         self._update_led2_label(False)
+        self._update_next_rec_time_label()
 
         with self.ctrl as s:
             s.write(self.ctrl.set_all_off())
@@ -488,10 +490,12 @@ class UserInterface:
 
     def test_run(self):
         def _start_recording():
-            recording_name = f'{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}_fps-{self.s_copy.fps}'
+            now = datetime.now()
+            recording_name = f'{now.strftime("%Y-%m-%d-%H-%M-%S")}_fps-{self.s_copy.fps}'
             recording_path = f'output/{self.is_test_run}/{recording_name}'
             os.makedirs(recording_path, exist_ok=True)
             self.recording = recording_name
+            self._update_next_rec_time_label(now + timedelta(seconds=self.s_copy.recording_timeout))
             _logger.debug('start recording')
 
         def _start_vent():
@@ -562,6 +566,8 @@ class UserInterface:
             start_led1_time = cycle_time + longest - self.s_copy.led1_time
             start_led2_time = cycle_time + longest - self.s_copy.led2_time
 
+            self._update_next_rec_time_label(datetime.fromtimestamp(start_recording_time))
+
             actions: list = sorted({
                 start_recording_time: _start_recording,
                 start_vent_time: _start_vent,
@@ -595,6 +601,11 @@ class UserInterface:
     
     def _update_frame_label(self):
         self.frame_label.configure(text=f'Frame: {self.frame_count}/{self.s_copy.frame_count}')
+
+    def _update_next_rec_time_label(self, start_recording_time=None):
+        self.next_rec_time_label.configure(
+            text=f'Next recording starts at:\n'
+                 f'{start_recording_time.strftime("%Y-%m-%d %H:%M:%S") if start_recording_time is not None else ""}')
 
     def _wait_until(self, target_time):
         now = time.time()
@@ -703,6 +714,8 @@ class UserInterface:
         self.led2_label.grid(column=0, row=4, sticky='ne')
         self.frame_label = tk.Label(self.test_run_frame, text='', anchor='ne', justify='right')
         self.frame_label.grid(column=0, row=5, sticky='ne')
+        self.next_rec_time_label = tk.Label(self.test_run_frame, text='', anchor='ne', justify='right')
+        self.next_rec_time_label.grid(column=0, row=6, sticky='ne')
 
         self.analyze_button = tk.Button(self.view_controls, text='Analyze Testrun', command=self.analyze_testrun)
         self.analyze_button.grid(column=1, row=0, padx=(0, 20))
